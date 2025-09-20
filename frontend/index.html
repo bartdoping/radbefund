@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RadBefund+ - Radiologische Befunde optimieren</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8f9fa; 
+        }
+        #container { 
+            /* The React app will render into this container */
+        }
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        // Override Office.js specific behavior for web deployment
+        window.Office = {
+            onReady: (callback) => {
+                console.log("Office.onReady called in web context.");
+                callback({ host: "WEB", platform: "WEB" });
+            },
+            context: {
+                ui: {
+                    displayDialogAsync: (url, options, callback) => {
+                        console.log("displayDialogAsync called in web context:", url);
+                        // Simulate dialog behavior or redirect
+                        window.open(url, '_blank');
+                        callback({ status: Office.AsyncResultStatus.Succeeded });
+                    }
+                }
+            }
+        };
+        window.Word = undefined; // Ensure Word object is not present
+    </script>
+</head>
+<body>
+    <div id="container"></div>
+    <script src="dist/taskpane.js"></script>
+</body>
+</html>

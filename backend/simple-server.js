@@ -1,0 +1,561 @@
+// Simple server without complex services
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
+const OpenAI = require('openai');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors({
+  origin: 'http://localhost:3002',
+  credentials: true
+}));
+app.use(express.json());
+
+// Database connection
+const pool = new Pool({
+  user: process.env.DB_USER || 'radbefund_user',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'radbefund_db',
+  password: process.env.DB_PASSWORD || 'radbefund_password',
+  port: process.env.DB_PORT || 5432,
+});
+
+// Test database connection
+pool.query('SELECT 1', (err, result) => {
+  if (err) {
+    console.error('Database connection failed:', err);
+  } else {
+    console.log('✅ Database connected successfully');
+  }
+});
+
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here';
+
+// OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// Auth middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// Routes
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    provider: 'development',
+    timestamp: new Date().toISOString(),
+    users: 'Database connected'
+  });
+});
+
+// Register
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, organization } = req.body;
+    
+    // Check if user exists
+    const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: "Benutzer mit dieser E-Mail existiert bereits" });
+    }
+    
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 12);
+    
+    // Create user
+    const result = await pool.query(
+      'INSERT INTO users (email, password_hash, name, organization, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [email.toLowerCase(), passwordHash, name, organization, true]
+    );
+    
+    const user = result.rows[0];
+    
+    // Generate tokens
+    const accessToken = jwt.sign({ userId: user.id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await pool.query(
+      'INSERT INTO refresh_tokens (token, user_id, expires_at, is_revoked) VALUES ($1, $2, $3, $4)',
+      [refreshToken, user.id, expiresAt, false]
+    );
+    
+    res.status(201).json({
+      message: "Benutzer erfolgreich registriert",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organization: user.organization,
+        createdAt: user.created_at
+      },
+      accessToken,
+      refreshToken
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Login
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Find user
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Ungültige Anmeldedaten" });
+    }
+    
+    const user = result.rows[0];
+    
+    if (!user.is_active) {
+      return res.status(401).json({ error: "Benutzerkonto ist deaktiviert" });
+    }
+    
+    // Check password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: "Ungültige Anmeldedaten" });
+    }
+    
+    // Update last login
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    
+    // Generate tokens
+    const accessToken = jwt.sign({ userId: user.id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await pool.query(
+      'INSERT INTO refresh_tokens (token, user_id, expires_at, is_revoked) VALUES ($1, $2, $3, $4)',
+      [refreshToken, user.id, expiresAt, false]
+    );
+    
+    res.json({
+      message: "Erfolgreich angemeldet",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organization: user.organization,
+        lastLogin: new Date()
+      },
+      accessToken,
+      refreshToken
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Refresh token
+app.post('/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    // Check refresh token
+    const result = await pool.query('SELECT * FROM refresh_tokens WHERE token = $1 AND is_revoked = FALSE', [refreshToken]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Ungültiger Refresh Token" });
+    }
+    
+    const tokenData = result.rows[0];
+    
+    if (tokenData.expires_at < new Date()) {
+      await pool.query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = $1', [refreshToken]);
+      return res.status(401).json({ error: "Refresh Token abgelaufen" });
+    }
+    
+    // Check if user exists
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [tokenData.user_id]);
+    if (userResult.rows.length === 0 || !userResult.rows[0].is_active) {
+      await pool.query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = $1', [refreshToken]);
+      return res.status(401).json({ error: "Benutzer nicht gefunden oder deaktiviert" });
+    }
+    
+    // Generate new tokens
+    const accessToken = jwt.sign({ userId: tokenData.user_id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const newRefreshToken = jwt.sign({ userId: tokenData.user_id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Revoke old refresh token
+    await pool.query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = $1', [refreshToken]);
+    
+    // Store new refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await pool.query(
+      'INSERT INTO refresh_tokens (token, user_id, expires_at, is_revoked) VALUES ($1, $2, $3, $4)',
+      [newRefreshToken, tokenData.user_id, expiresAt, false]
+    );
+    
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken
+    });
+  } catch (err) {
+    console.error('Refresh error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Logout
+app.post('/auth/logout', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Revoke all refresh tokens for user
+    await pool.query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE user_id = $1', [userId]);
+    
+    res.json({ message: "Erfolgreich abgemeldet" });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Profile
+app.get('/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Benutzer nicht gefunden" });
+    }
+    
+    const user = result.rows[0];
+    
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organization: user.organization,
+        createdAt: user.created_at,
+        lastLogin: user.last_login
+      }
+    });
+  } catch (err) {
+    console.error('Profile error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Layout endpoints
+// Get user layouts
+app.get('/layouts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query('SELECT * FROM user_layouts WHERE user_id = $1 ORDER BY name', [userId]);
+    
+    res.json({ layouts: result.rows });
+  } catch (err) {
+    console.error('Get layouts error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Create layout
+app.post('/layouts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { name, description, template } = req.body;
+    
+    const result = await pool.query(
+      'INSERT INTO user_layouts (user_id, name, description, template) VALUES ($1, $2, $3, $4) RETURNING *',
+      [userId, name, description, template]
+    );
+    
+    res.status(201).json({ layout: result.rows[0] });
+  } catch (err) {
+    console.error('Create layout error:', err);
+    if (err.code === '23505') { // Unique constraint violation
+      res.status(409).json({ error: "Layout mit diesem Namen existiert bereits" });
+    } else {
+      res.status(500).json({ error: "Interner Serverfehler" });
+    }
+  }
+});
+
+// Update layout
+app.put('/layouts/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const layoutId = req.params.id;
+    const { name, description, template } = req.body;
+    
+    const result = await pool.query(
+      'UPDATE user_layouts SET name = $1, description = $2, template = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND user_id = $5 RETURNING *',
+      [name, description, template, layoutId, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Layout nicht gefunden" });
+    }
+    
+    res.json({ layout: result.rows[0] });
+  } catch (err) {
+    console.error('Update layout error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Delete layout
+app.delete('/layouts/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const layoutId = req.params.id;
+    
+    const result = await pool.query(
+      'DELETE FROM user_layouts WHERE id = $1 AND user_id = $2 RETURNING *',
+      [layoutId, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Layout nicht gefunden" });
+    }
+    
+    res.json({ message: "Layout erfolgreich gelöscht" });
+  } catch (err) {
+    console.error('Delete layout error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Simple AI endpoint (placeholder)
+app.post('/structured', authenticateToken, async (req, res) => {
+  try {
+    console.log('Structured endpoint called', { userId: req.user.userId, textLength: req.body.text?.length });
+    
+    const { text, options } = req.body;
+    
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: "Befundtext ist erforderlich" });
+    }
+    
+    // Check if OpenAI API key is available
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+      console.log('OpenAI API Key not configured');
+      return res.status(500).json({ 
+        error: "OpenAI API Key nicht konfiguriert. Bitte setzen Sie OPENAI_API_KEY in der .env Datei." 
+      });
+    }
+    
+    console.log('OpenAI API Key is configured, proceeding with AI call');
+    
+    // Determine processing level based on options
+    const mode = options?.mode || '1';
+    const layout = options?.layout;
+    
+    // Build the prompt based on mode and layout
+    let systemPrompt = `Sie sind ein erfahrener Radiologe und medizinischer Experte. Ihre Aufgabe ist es, radiologische Befunde zu optimieren und zu verbessern.
+
+KRITISCHE ANWEISUNGEN FÜR LAYOUT-TEMPLATES:
+- Wenn ein Layout-Template verwendet wird, BEHALTEN Sie die Kompartiment-Struktur EXAKT bei
+- ÄNDERN Sie NICHT die Kompartiment-Namen oder -Gruppierungen (z.B. "Leber: [@]", "Herz, Gefäße: [@]")
+- ERSETZEN Sie nur die [@] Platzhalter durch den entsprechenden Inhalt aus dem Befund
+- Bei unauffälligen Befunden in einem Kompartiment verwenden Sie "Unauffällig."
+- BEHALTEN Sie die ursprüngliche Formatierung und Struktur bei
+
+WICHTIGE ANWEISUNGEN FÜR BILD-/SERIENNUMMERN:
+- Wenn der Nutzer Bild-/Seriennummern angibt (z.B. "Bild 1/5", "Serie 2", "Slice 15/20"), MÜSSEN diese UNBEDINGT beibehalten werden
+- Diese Nummern sind für die Nachverfolgung und Dokumentation essentiell
+- Fügen Sie sie an der entsprechenden Stelle im optimierten Befund ein
+- Ändern Sie NICHT die Nummerierung oder Reihenfolge`;
+
+    let userPrompt = `Bitte optimieren Sie folgenden radiologischen Befund:\n\n${text}\n\n
+
+WICHTIG: Achten Sie besonders auf Bild-/Seriennummern im Befund. Diese MÜSSEN unbedingt beibehalten werden, da sie für die medizinische Dokumentation und Nachverfolgung essentiell sind.`;
+    
+    // Add mode-specific instructions
+    switch (mode) {
+      case '1':
+        systemPrompt += ` Führen Sie eine sprachliche und grammatikalische Korrektur durch.`;
+        userPrompt += `Führen Sie eine sprachliche und grammatikalische Korrektur des Befundes durch.`;
+        break;
+      case '2':
+        systemPrompt += ` Verbessern Sie die medizinische Terminologie und Präzision.`;
+        userPrompt += `Verbessern Sie die medizinische Terminologie und machen Sie den Befund präziser.`;
+        break;
+      case '3':
+        systemPrompt += ` Strukturieren Sie den Befund um und fügen Sie eine kurze Beurteilung hinzu (Oberarzt-Niveau).`;
+        userPrompt += `Strukturieren Sie den Befund um und fügen Sie eine kurze, prägnante Beurteilung hinzu.`;
+        break;
+      case '4':
+        systemPrompt += ` Optimieren Sie den Befund und fügen Sie klinische Empfehlungen hinzu.`;
+        userPrompt += `Optimieren Sie den Befund und fügen Sie klinische Empfehlungen für weitere Diagnostik oder Therapie hinzu.`;
+        break;
+      case '5':
+        systemPrompt += ` Optimieren Sie den Befund vollständig und fügen Sie zusätzliche Informationen und Differentialdiagnosen hinzu.`;
+        userPrompt += `Optimieren Sie den Befund vollständig und fügen Sie zusätzliche Informationen und relevante Differentialdiagnosen hinzu.`;
+        break;
+    }
+    
+    // Apply layout template if provided
+    if (layout && layout.trim()) {
+      userPrompt += `\n\nWICHTIG: Verwenden Sie folgendes Layout-Template EXAKT als Struktur:\n\n${layout}
+
+KRITISCHE ANWEISUNGEN:
+1. BEHALTEN Sie die Kompartiment-Struktur EXAKT bei (z.B. "Leber: [@]", "Herz, Gefäße: [@]")
+2. ÄNDERN Sie NICHT die Kompartiment-Namen oder -Gruppierungen
+3. ERSETZEN Sie nur die [@] Platzhalter durch den entsprechenden Inhalt aus dem Befund
+4. Bei unauffälligen Befunden in einem Kompartiment verwenden Sie "Unauffällig."
+5. BEHALTEN Sie die ursprüngliche Formatierung und Struktur bei
+
+BEISPIEL:
+Template: "Leber: [@]\nHerz, Gefäße: [@]"
+Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gefäßveränderungen."`;
+    }
+    
+    // Build JSON response format based on mode
+    let jsonFormat = `\n\nAntworten Sie im folgenden JSON-Format:
+{
+  "befund": "Der optimierte Befundtext"`;
+
+    if (mode >= '3') {
+      jsonFormat += `,
+  "beurteilung": "Kurze Beurteilung"`;
+    }
+    
+    if (mode >= '4') {
+      jsonFormat += `,
+  "empfehlungen": "Klinische Empfehlungen"`;
+    }
+    
+    if (mode >= '5') {
+      jsonFormat += `,
+  "zusatzinformationen": "Zusätzliche Informationen/DDx"`;
+    }
+    
+    jsonFormat += `
+}`;
+    
+    userPrompt += jsonFormat;
+    
+    // Call OpenAI API
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 2000
+    });
+    
+    const aiResponse = completion.choices[0].message.content;
+    
+    // Try to parse JSON response
+    let response;
+    try {
+      response = JSON.parse(aiResponse);
+      
+      // Filter response based on mode - only include fields for active levels
+      const filteredResponse = {
+        befund: response.befund || aiResponse
+      };
+      
+      if (mode >= '3' && response.beurteilung) {
+        filteredResponse.beurteilung = response.beurteilung;
+      }
+      
+      if (mode >= '4' && response.empfehlungen) {
+        filteredResponse.empfehlungen = response.empfehlungen;
+      }
+      
+      if (mode >= '5' && response.zusatzinformationen) {
+        filteredResponse.zusatzinformationen = response.zusatzinformationen;
+      }
+      
+      response = filteredResponse;
+    } catch (parseError) {
+      // If JSON parsing fails, create a structured response
+      response = {
+        befund: aiResponse
+      };
+      
+      if (mode >= '3') {
+        response.beurteilung = "Beurteilung wurde generiert.";
+      }
+      
+      if (mode >= '4') {
+        response.empfehlungen = "Klinische Empfehlungen wurden generiert.";
+      }
+      
+      if (mode >= '5') {
+        response.zusatzinformationen = "Zusätzliche Informationen wurden generiert.";
+      }
+    }
+    
+    res.json({ blocked: false, answer: response });
+    
+  } catch (err) {
+    console.error('AI processing error:', err);
+    
+    // Handle specific OpenAI errors
+    if (err.code === 'insufficient_quota') {
+      return res.status(402).json({ error: "OpenAI API Quota überschritten. Bitte überprüfen Sie Ihr Konto." });
+    } else if (err.code === 'invalid_api_key') {
+      return res.status(401).json({ error: "Ungültiger OpenAI API Key." });
+    }
+    
+    res.status(500).json({ error: "Fehler bei der AI-Verarbeitung: " + err.message });
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 RadBefund+ Backend läuft auf http://localhost:${PORT}`);
+  console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+  console.log(`🔐 Auth Endpoints: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/profile`);
+  console.log(`🤖 AI Endpoints: /structured`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, closing server gracefully...');
+  pool.end(() => {
+    console.log('Database pool closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, closing server gracefully...');
+  pool.end(() => {
+    console.log('Database pool closed');
+    process.exit(0);
+  });
+});

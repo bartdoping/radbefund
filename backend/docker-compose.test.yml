@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: radbefund-postgres-test
+    environment:
+      POSTGRES_DB: radbefund_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d radbefund_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test Redis Cache
+  redis-test:
+    image: redis:7-alpine
+    container_name: radbefund-redis-test
+    command: redis-server --appendonly yes --requirepass test_redis_password
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Test Backend Application
+  backend-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: radbefund-backend-test
+    environment:
+      NODE_ENV: test
+      PORT: 3001
+      USE_HTTPS: false
+      
+      # Database
+      DATABASE_URL: postgresql://test_user:test_password@postgres-test:5432/radbefund_test
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+      DB_NAME: radbefund_test
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      DB_SSL: false
+      
+      # Redis
+      REDIS_URL: redis://:test_redis_password@redis-test:6379
+      REDIS_HOST: redis-test
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: test_redis_password
+      REDIS_DB: 1
+      
+      # JWT
+      JWT_SECRET: test-jwt-secret-key-for-testing-only
+      JWT_EXPIRES_IN: 1h
+      BCRYPT_ROUNDS: 4
+      
+      # AI (Mock)
+      PROVIDER: openai
+      OPENAI_API_KEY: test-key
+      OPENAI_MODEL: gpt-4o-mini
+      
+      # Rate Limiting (Relaxed)
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 1000
+      AUTH_RATE_LIMIT_WINDOW_MS: 60000
+      AUTH_RATE_LIMIT_MAX_REQUESTS: 100
+      
+      # Monitoring
+      PROMETHEUS_PORT: 9090
+      LOG_LEVEL: error
+      
+      # Cache TTL (Short)
+      CACHE_TTL_USER_SESSION: 300
+      CACHE_TTL_LAYOUT_TEMPLATE: 300
+      CACHE_TTL_AI_RESPONSE: 60
+      CACHE_TTL_USER_PREFERENCES: 300
+      
+      # Security
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3001
+      HELMET_ENABLED: false
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadBefund+ - Radiologische Befunde optimieren</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f8f9fa;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .logo-text {
+            color: white;
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        
+        .title {
+            font-size: 48px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+        
+        .subtitle {
+            font-size: 20px;
+            color: #6c757d;
+            margin-bottom: 32px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        
+        .auth-card {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .workflow-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .workflow-option {
+            padding: 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        
+        .workflow-option.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        }
+        
+        .workflow-option h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+        
+        .workflow-option p {
+            font-size: 14px;
+            color: #6c757d;
+        }
+        
+        .textarea-container {
+            margin-bottom: 24px;
+        }
+        
+        .textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        .textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .result {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-left: 4px solid #28a745;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 24px;
+            white-space: pre-wrap;
+            font-family: inherit;
+            line-height: 1.7;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+        
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status {
+            text-align: center;
+            padding: 20px;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #e8f5e8;
+            border-radius: 8px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-tab:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+        
+        .auth-tab:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .auth-tab.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <span class="logo-text">R+</span>
+            </div>
+            <h1 class="title">RadBefund+</h1>
+            <p class="subtitle">Radiologische Befunde – sprachlich sauber, klar strukturiert.</p>
+        </div>
+        
+        <div class="status" id="status">
+            <strong>System-Status:</strong> <span id="statusText">Verbindung wird hergestellt...</span>
+        </div>
+        
+        <!-- Auth Section -->
+        <div id="authSection" class="card auth-card">
+            <h2 style="margin-bottom: 20px; color: #2c3e50; text-align: center;">Anmeldung</h2>
+            
+            <div class="auth-tabs">
+                <div class="auth-tab active" onclick="switchAuthMode('login')">Anmelden</div>
+                <div class="auth-tab" onclick="switchAuthMode('register')">Registrieren</div>
+            </div>
+            
+            <form id="authForm">
+                <div id="registerFields" class="hidden">
+                    <input type="text" class="input" id="name" placeholder="Name *" required>
+                </div>
+                
+                <input type="email" class="input" id="email" placeholder="E-Mail *" required>
+                <input type="password" class="input" id="password" placeholder="Passwort *" required>
+                
+                <div id="confirmPasswordField" class="hidden">
+                    <input type="password" class="input" id="confirmPassword" placeholder="Passwort bestätigen *">
+                </div>
+                
+                <button type="submit" class="btn" id="authBtn">
+                    Anmelden
+                </button>
+            </form>
+            
+            <div id="authError" class="error hidden"></div>
+            <div id="authSuccess" class="success hidden"></div>
+        </div>
+        
+        <!-- Main App Section -->
+        <div id="appSection" class="hidden">
+            <div class="user-info">
+                <div>
+                    <strong>Angemeldet als:</strong> <span id="userName"></span>
+                    <br>
+                    <small id="userEmail"></small>
+                </div>
+                <button class="btn btn-secondary" onclick="logout()" style="width: auto; padding: 8px 16px;">
+                    Abmelden
+                </button>
+            </div>
+            
+            <div class="card">
+                <h2 style="margin-bottom: 20px; color: #2c3e50;">Workflow-Optionen</h2>
+                <div class="workflow-options">
+                    <div class="workflow-option active" data-level="1">
+                        <h3>1: Sprachliche & grammatikalische Korrektur</h3>
+                        <p>Korrigiert Rechtschreibung, Grammatik und Tippfehler. Immer aktiv.</p>
+                    </div>
+                    <div class="workflow-option" data-level="2">
+                        <h3>2: Terminologie verbessern</h3>
+                        <p>Vereinheitlicht radiologische Fachterminologie nach deutscher Standardsprache.</p>
+                    </div>
+                    <div class="workflow-option" data-level="3">
+                        <h3>3: Umstrukturierung + Beurteilung</h3>
+                        <p>Strukturiert professionell um und erstellt medizinische Beurteilung.</p>
+                    </div>
+                    <div class="workflow-option" data-level="4">
+                        <h3>4: Klinische Empfehlung</h3>
+                        <p>Fügt klinisch relevante Empfehlungen hinzu, wenn medizinisch sinnvoll.</p>
+                    </div>
+                    <div class="workflow-option" data-level="5">
+                        <h3>5: Zusatzinfos/DDx</h3>
+                        <p>Ergänzt Differentialdiagnosen und wichtige Zusatzinformationen.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 style="margin-bottom: 20px; color: #2c3e50;">Befundtext eingeben</h2>
+                <div class="textarea-container">
+                    <textarea 
+                        class="textarea" 
+                        id="befundText" 
+                        placeholder="Fügen Sie hier den gesamten Befundtext ein. Die KI erkennt automatisch Anamnese, Fragestellung, Diagnose, Befund und Beurteilung und trennt diese entsprechend auf."
+                    ></textarea>
+                </div>
+                <button class="btn" id="generateBtn" onclick="generateBefund()">
+                    Befund erstellen
+                </button>
+            </div>
+            
+            <div id="result" style="display: none;"></div>
+            <div id="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedLevel = 1;
+        let authMode = 'login';
+        let authState = {
+            isAuthenticated: false,
+            user: null,
+            accessToken: null,
+            refreshToken: null
+        };
+        
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            checkStatus();
+            loadAuthState();
+            setupEventListeners();
+        });
+        
+        function setupEventListeners() {
+            // Workflow options
+            document.querySelectorAll('.workflow-option').forEach(option => {
+                option.addEventListener('click', () => {
+                    const level = parseInt(option.dataset.level);
+                    if (level === 1) return; // Option 1 ist immer aktiv
+                    
+                    option.classList.toggle('active');
+                    selectedLevel = Math.max(...Array.from(document.querySelectorAll('.workflow-option.active'))
+                        .map(el => parseInt(el.dataset.level)));
+                });
+            });
+            
+            // Auth form
+            document.getElementById('authForm').addEventListener('submit', handleAuth);
+        }
+        
+        function switchAuthMode(mode) {
+            authMode = mode;
+            
+            // Update tabs
+            document.querySelectorAll('.auth-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update form
+            const registerFields = document.getElementById('registerFields');
+            const confirmPasswordField = document.getElementById('confirmPasswordField');
+            const authBtn = document.getElementById('authBtn');
+            
+            if (mode === 'register') {
+                registerFields.classList.remove('hidden');
+                confirmPasswordField.classList.remove('hidden');
+                authBtn.textContent = 'Registrieren';
+            } else {
+                registerFields.classList.add('hidden');
+                confirmPasswordField.classList.add('hidden');
+                authBtn.textContent = 'Anmelden';
+            }
+            
+            clearAuthMessages();
+        }
+        
+        async function handleAuth(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const name = document.getElementById('name').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Validation
+            if (authMode === 'register') {
+                if (!name || !email || !password || !confirmPassword) {
+                    showAuthError('Alle Felder sind erforderlich.');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    showAuthError('Passwörter stimmen nicht überein.');
+                    return;
+                }
+                if (password.length < 8) {
+                    showAuthError('Passwort muss mindestens 8 Zeichen lang sein.');
+                    return;
+                }
+            } else {
+                if (!email || !password) {
+                    showAuthError('E-Mail und Passwort sind erforderlich.');
+                    return;
+                }
+            }
+            
+            const btn = document.getElementById('authBtn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="loading"></span>' + originalText + '...';
+            btn.disabled = true;
+            
+            try {
+                const endpoint = authMode === 'register' ? '/auth/register' : '/auth/login';
+                const body = authMode === 'register' 
+                    ? { email, password, name }
+                    : { email, password };
+                
+                const response = await fetch('http://localhost:3001' + endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authState = {
+                        isAuthenticated: true,
+                        user: data.user,
+                        accessToken: data.accessToken,
+                        refreshToken: data.refreshToken
+                    };
+                    
+                    saveAuthState();
+                    showAuthSuccess(authMode === 'register' ? 'Registrierung erfolgreich!' : 'Anmeldung erfolgreich!');
+                    
+                    setTimeout(() => {
+                        showApp();
+                    }, 1000);
+                } else {
+                    showAuthError(data.error || 'Fehler bei der ' + (authMode === 'register' ? 'Registrierung' : 'Anmeldung'));
+                }
+            } catch (error) {
+                showAuthError('Netzwerkfehler: ' + error.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        function showAuthError(message) {
+            const errorDiv = document.getElementById('authError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            document.getElementById('authSuccess').classList.add('hidden');
+        }
+        
+        function showAuthSuccess(message) {
+            const successDiv = document.getElementById('authSuccess');
+            successDiv.textContent = message;
+            successDiv.classList.remove('hidden');
+            document.getElementById('authError').classList.add('hidden');
+        }
+        
+        function clearAuthMessages() {
+            document.getElementById('authError').classList.add('hidden');
+            document.getElementById('authSuccess').classList.add('hidden');
+        }
+        
+        function showApp() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('appSection').classList.remove('hidden');
+            
+            document.getElementById('userName').textContent = authState.user.name;
+            document.getElementById('userEmail').textContent = authState.user.email;
+        }
+        
+        function logout() {
+            authState = {
+                isAuthenticated: false,
+                user: null,
+                accessToken: null,
+                refreshToken: null
+            };
+            
+            localStorage.removeItem('authState');
+            
+            document.getElementById('appSection').classList.add('hidden');
+            document.getElementById('authSection').classList.remove('hidden');
+            
+            // Clear form
+            document.getElementById('authForm').reset();
+            clearAuthMessages();
+        }
+        
+        function saveAuthState() {
+            localStorage.setItem('authState', JSON.stringify(authState));
+        }
+        
+        function loadAuthState() {
+            const saved = localStorage.getItem('authState');
+            if (saved) {
+                try {
+                    authState = JSON.parse(saved);
+                    if (authState.isAuthenticated && authState.accessToken) {
+                        showApp();
+                    }
+                } catch (error) {
+                    console.error('Error loading auth state:', error);
+                    localStorage.removeItem('authState');
+                }
+            }
+        }
+        
+        // System-Status prüfen
+        async function checkStatus() {
+            try {
+                const response = await fetch('http://localhost:3001/healthz');
+                if (response.ok) {
+                    document.getElementById('statusText').textContent = '✅ Backend verbunden';
+                    document.getElementById('status').style.background = '#d4edda';
+                    document.getElementById('status').style.borderColor = '#c3e6cb';
+                    document.getElementById('status').style.color = '#155724';
+                } else {
+                    throw new Error('Backend nicht erreichbar');
+                }
+            } catch (error) {
+                document.getElementById('statusText').textContent = '❌ Backend nicht erreichbar';
+                document.getElementById('status').style.background = '#f8d7da';
+                document.getElementById('status').style.borderColor = '#f5c6cb';
+                document.getElementById('status').style.color = '#721c24';
+            }
+        }
+        
+        // Befund generieren
+        async function generateBefund() {
+            const text = document.getElementById('befundText').value.trim();
+            if (!text) {
+                showError('Bitte Befundtext eingeben.');
+                return;
+            }
+            
+            const btn = document.getElementById('generateBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span>Befund wird erstellt...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('http://localhost:3001/structured', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authState.accessToken}`
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        options: {
+                            mode: selectedLevel.toString(),
+                            stil: 'neutral',
+                            ansprache: 'neutral',
+                            includeRecommendations: true
+                        },
+                        allowContentChanges: false
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.status === 403) {
+                    // Token expired, try to refresh
+                    const refreshSuccess = await refreshToken();
+                    if (refreshSuccess) {
+                        // Retry with new token
+                        const retryResponse = await fetch('http://localhost:3001/structured', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${authState.accessToken}`
+                            },
+                            body: JSON.stringify({
+                                text: text,
+                                options: {
+                                    mode: selectedLevel.toString(),
+                                    stil: 'neutral',
+                                    ansprache: 'neutral',
+                                    includeRecommendations: true
+                                },
+                                allowContentChanges: false
+                            })
+                        });
+                        const retryData = await retryResponse.json();
+                        showResult(retryData.answer);
+                    } else {
+                        showError('Sitzung abgelaufen. Bitte melden Sie sich erneut an.');
+                        logout();
+                    }
+                } else if (data.blocked) {
+                    const proceed = confirm('Änderungen betreffen Inhalt. Möchten Sie fortfahren?\n\n' + 
+                        (data.reasons ? data.reasons.join('\n') : ''));
+                    if (proceed) {
+                        // Zweiter Versuch mit allowContentChanges: true
+                        const response2 = await fetch('http://localhost:3001/structured', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${authState.accessToken}`
+                            },
+                            body: JSON.stringify({
+                                text: text,
+                                options: {
+                                    mode: selectedLevel.toString(),
+                                    stil: 'neutral',
+                                    ansprache: 'neutral',
+                                    includeRecommendations: true
+                                },
+                                allowContentChanges: true
+                            })
+                        });
+                        const data2 = await response2.json();
+                        showResult(data2.answer);
+                    }
+                } else {
+                    showResult(data.answer);
+                }
+            } catch (error) {
+                showError('Fehler beim Generieren des Befunds: ' + error.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        async function refreshToken() {
+            try {
+                const response = await fetch('http://localhost:3001/auth/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ refreshToken: authState.refreshToken })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    authState.accessToken = data.accessToken;
+                    authState.refreshToken = data.refreshToken;
+                    saveAuthState();
+                    return true;
+                }
+            } catch (error) {
+                console.error('Token refresh failed:', error);
+            }
+            return false;
+        }
+        
+        function showResult(result) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="card">
+                    <h2 style="margin-bottom: 20px; color: #2c3e50;">Generierter Befund</h2>
+                    <div class="result">${result.befund || result}</div>
+                    ${result.beurteilung ? `
+                        <h3 style="margin: 20px 0 10px 0; color: #2c3e50;">Beurteilung</h3>
+                        <div class="result">${result.beurteilung}</div>
+                    ` : ''}
+                    ${result.empfehlungen ? `
+                        <h3 style="margin: 20px 0 10px 0; color: #2c3e50;">Empfehlungen</h3>
+                        <div class="result">${result.empfehlungen}</div>
+                    ` : ''}
+                    ${result.zusatzinformationen ? `
+                        <h3 style="margin: 20px 0 10px 0; color: #2c3e50;">Zusatzinformationen</h3>
+                        <div class="result">${result.zusatzinformationen}</div>
+                    ` : ''}
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            
+            // Nach unten scrollen
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.innerHTML = `<div class="error">${message}</div>`;
+            errorDiv.style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+        }
+        
+        // Status beim Laden prüfen
+        setInterval(checkStatus, 30000); // Alle 30 Sekunden prüfen
+    </script>
+</body>
+</html>

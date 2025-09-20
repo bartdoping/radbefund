@@ -1,0 +1,159 @@
+# tests/load/load-test.yml
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 2
+      name: "Warm-up"
+    
+    # Ramp-up phase
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 20
+      name: "Ramp-up"
+    
+    # Sustained load phase
+    - duration: 120
+      arrivalRate: 20
+      name: "Sustained load"
+    
+    # Peak load phase
+    - duration: 60
+      arrivalRate: 50
+      name: "Peak load"
+    
+    # Cool-down phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Cool-down"
+
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+  processor: './load-test-processor.js'
+
+scenarios:
+  - name: "Authentication Flow"
+    weight: 20
+    flow:
+      - post:
+          url: "/auth/register"
+          json:
+            email: "loadtest{{ $randomInt(1, 10000) }}@example.com"
+            password: "LoadTest123!"
+            name: "Load Test User {{ $randomInt(1, 10000) }}"
+            organization: "Load Test Org"
+          capture:
+            - json: "$.accessToken"
+              as: "accessToken"
+            - json: "$.refreshToken"
+              as: "refreshToken"
+          expect:
+            - statusCode: 201
+
+      - post:
+          url: "/auth/login"
+          json:
+            email: "loadtest{{ $randomInt(1, 10000) }}@example.com"
+            password: "LoadTest123!"
+          expect:
+            - statusCode: [200, 401] # 401 if user doesn't exist
+
+      - get:
+          url: "/auth/profile"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          expect:
+            - statusCode: [200, 401, 403]
+
+  - name: "AI Processing"
+    weight: 60
+    flow:
+      - post:
+          url: "/auth/register"
+          json:
+            email: "ai{{ $randomInt(1, 10000) }}@example.com"
+            password: "LoadTest123!"
+            name: "AI Load Test User {{ $randomInt(1, 10000) }}"
+          capture:
+            - json: "$.accessToken"
+              as: "accessToken"
+
+      - post:
+          url: "/structured"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          json:
+            text: |
+              Thorax CT
+              
+              Technik: Spiral-CT in Atemanhaltetechnik
+              
+              Befund:
+              Herz: Normal groß, keine Perikarderguss
+              Lunge: Beidseits basal diskrete Atelektasen
+              Pleura: Frei
+              
+              Beurteilung:
+              Unauffälliger Thorax-CT ohne pathologische Befunde
+            options:
+              mode: "{{ $randomInt(1, 5) }}"
+              stil: "neutral"
+              ansprache: "neutral"
+              includeRecommendations: true
+            allowContentChanges: false
+          expect:
+            - statusCode: [200, 201, 429] # 429 for rate limiting
+
+      - post:
+          url: "/process"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          json:
+            text: "Einfacher Befundtext mit Tippfehlern für Load Testing."
+            options:
+              mode: "1"
+              stil: "neutral"
+              ansprache: "neutral"
+              includeRecommendations: false
+            allowContentChanges: false
+          expect:
+            - statusCode: [200, 429]
+
+  - name: "Health Checks"
+    weight: 10
+    flow:
+      - get:
+          url: "/healthz"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/metrics"
+          expect:
+            - statusCode: 200
+
+  - name: "Rate Limiting Test"
+    weight: 10
+    flow:
+      - loop:
+          - post:
+              url: "/auth/login"
+              json:
+                email: "ratelimit@example.com"
+                password: "WrongPassword"
+              expect:
+                - statusCode: [401, 429]
+          count: 10
+          think: 0.1
