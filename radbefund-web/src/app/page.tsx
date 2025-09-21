@@ -315,8 +315,8 @@ export default function Home() {
 
     let response = await makeRequest(accessToken);
     
-    // If token expired, try to refresh
-    if (response.status === 401 && refreshToken) {
+    // If token expired or forbidden, try to refresh
+    if ((response.status === 401 || response.status === 403) && refreshToken) {
       try {
         const refreshResponse = await fetch('http://localhost:3001/auth/refresh', {
           method: 'POST',
@@ -685,6 +685,11 @@ export default function Home() {
       if (data.blocked) {
         setError(data.message);
         setResult(data.suggestion);
+        // Don't save to history if blocked
+      } else if (!response.ok) {
+        setError(data.error || 'Fehler bei der Verarbeitung');
+        setResult('');
+        // Don't save to history if request failed
       } else {
         // Handle structured response
         if (typeof data.answer === 'object' && data.answer !== null) {
@@ -712,12 +717,16 @@ export default function Home() {
           }
           
           setResult(formattedResult);
-          // Save to history
-          saveBefundToHistory(text.trim(), formattedResult);
+          // Only save to history if we have a valid result
+          if (formattedResult.trim()) {
+            saveBefundToHistory(text.trim(), formattedResult);
+          }
         } else {
           setResult(data.answer);
-          // Save to history
-          saveBefundToHistory(text.trim(), data.answer);
+          // Only save to history if we have a valid result
+          if (data.answer && data.answer.trim()) {
+            saveBefundToHistory(text.trim(), data.answer);
+          }
         }
       }
 
