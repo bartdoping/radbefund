@@ -57,11 +57,50 @@ async function setupDatabase() {
     const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
     
-    // Split schema into individual statements
-    const statements = schema
-      .split(';')
-      .map(stmt => stmt.trim())
-      .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+    // Split schema into individual statements, handling multi-line functions
+    const statements = [];
+    let currentStatement = '';
+    let inFunction = false;
+    let dollarQuote = '';
+    
+    const lines = schema.split('\n');
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Skip comments
+      if (trimmedLine.startsWith('--')) {
+        continue;
+      }
+      
+      // Check for function start
+      if (trimmedLine.includes('$$') && !inFunction) {
+        inFunction = true;
+        dollarQuote = trimmedLine.match(/\$\$[^$]*\$\$/)?.[0] || '$$';
+      }
+      
+      currentStatement += line + '\n';
+      
+      // Check for function end
+      if (inFunction && trimmedLine.includes(dollarQuote)) {
+        inFunction = false;
+        dollarQuote = '';
+      }
+      
+      // End of statement (not in function and ends with semicolon)
+      if (!inFunction && trimmedLine.endsWith(';')) {
+        const statement = currentStatement.trim();
+        if (statement.length > 0) {
+          statements.push(statement);
+        }
+        currentStatement = '';
+      }
+    }
+    
+    // Add any remaining statement
+    if (currentStatement.trim().length > 0) {
+      statements.push(currentStatement.trim());
+    }
     
     console.log(`📋 Executing ${statements.length} SQL statements...`);
     
@@ -76,6 +115,7 @@ async function setupDatabase() {
             console.log(`⚠️  Statement ${i + 1}/${statements.length} skipped (already exists)`);
           } else {
             console.error(`❌ Error in statement ${i + 1}:`, error.message);
+            console.error(`Problematic SQL:`, statement);
             throw error;
           }
         }

@@ -5,6 +5,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const OpenAI = require('openai');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -25,6 +27,90 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || 'radbefund_password',
   port: process.env.DB_PORT || 5432,
 });
+
+// Email configuration
+const emailTransporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'ahmadh.mustafaa@gmail.com',
+    pass: 'twdv ffya eceu dzcl'
+  }
+});
+
+// Helper functions
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const generateResetToken = () => {
+  return crypto.randomBytes(32).toString('hex');
+};
+
+const sendVerificationEmail = async (email, code) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER || 'ahmadh.mustafaa@gmail.com',
+    to: email,
+    subject: 'RadBefund+ - Email-Verifizierung',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2563eb;">RadBefund+ Email-Verifizierung</h2>
+        <p>Hallo,</p>
+        <p>vielen Dank für Ihre Registrierung bei RadBefund+!</p>
+        <p>Bitte verwenden Sie den folgenden 6-stelligen Code zur Verifizierung Ihrer Email-Adresse:</p>
+        <div style="background-color: #f3f4f6; padding: 20px; text-align: center; margin: 20px 0;">
+          <h1 style="color: #2563eb; font-size: 32px; margin: 0; letter-spacing: 5px;">${code}</h1>
+        </div>
+        <p>Dieser Code ist 15 Minuten gültig.</p>
+        <p>Falls Sie sich nicht registriert haben, können Sie diese Email ignorieren.</p>
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+        <p style="color: #6b7280; font-size: 14px;">RadBefund+ - Ihr intelligenter Radiologie-Assistent</p>
+      </div>
+    `
+  };
+  
+  try {
+    await emailTransporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('Email sending error:', error);
+    return false;
+  }
+};
+
+const sendPasswordResetEmail = async (email, resetToken) => {
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/reset-password?token=${resetToken}`;
+
+  const mailOptions = {
+    from: 'ahmadh.mustafaa@gmail.com',
+    to: email,
+    subject: 'RadBefund+ - Passwort zurücksetzen',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2563eb;">RadBefund+ Passwort zurücksetzen</h2>
+        <p>Hallo,</p>
+        <p>Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts gestellt.</p>
+        <p>Klicken Sie auf den folgenden Link, um Ihr Passwort zurückzusetzen:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Passwort zurücksetzen</a>
+        </div>
+        <p>Dieser Link ist 1 Stunde gültig.</p>
+        <p>Falls Sie diese Anfrage nicht gestellt haben, können Sie diese Email ignorieren.</p>
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+        <p style="color: #6b7280; font-size: 14px;">RadBefund+ - Ihr intelligenter Radiologie-Assistent</p>
+      </div>
+    `
+  };
+
+  try {
+    console.log('Sending password reset email to:', email);
+    const result = await emailTransporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('Email sending error:', error);
+    return false;
+  }
+};
 
 // Test database connection
 pool.query('SELECT 1', (err, result) => {
@@ -79,16 +165,69 @@ app.post('/auth/register', async (req, res) => {
     // Check if user exists
     const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ error: "Benutzer mit dieser E-Mail existiert bereits" });
+      return res.status(409).json({ 
+        error: "Diese E-Mail-Adresse ist bereits registriert",
+        suggestion: "Möchten Sie sich stattdessen anmelden?",
+        canLogin: true
+      });
     }
+    
+    // Generate verification code
+    const verificationCode = generateVerificationCode();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes
+    
+    // Store verification code
+    await pool.query(
+      'INSERT INTO email_verification_codes (email, code, expires_at) VALUES ($1, $2, $3)',
+      [email.toLowerCase(), verificationCode, expiresAt]
+    );
+    
+    // Send verification email
+    const emailSent = await sendVerificationEmail(email, verificationCode);
+    if (!emailSent) {
+      return res.status(500).json({ error: "Fehler beim Senden der Verifizierungs-Email" });
+    }
+    
+    res.status(200).json({
+      message: "Verifizierungs-Email wurde gesendet",
+      email: email.toLowerCase(),
+      requiresVerification: true
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+
+// Verify email and complete registration
+app.post('/auth/verify-email', async (req, res) => {
+  try {
+    const { email, code, password, name, organization } = req.body;
+    
+    // Check verification code
+    const verificationResult = await pool.query(
+      'SELECT * FROM email_verification_codes WHERE email = $1 AND code = $2 AND expires_at > NOW() AND is_used = false',
+      [email.toLowerCase(), code]
+    );
+    
+    if (verificationResult.rows.length === 0) {
+      return res.status(400).json({ error: "Ungültiger oder abgelaufener Verifizierungscode" });
+    }
+    
+    // Mark code as used
+    await pool.query(
+      'UPDATE email_verification_codes SET is_used = true WHERE email = $1 AND code = $2',
+      [email.toLowerCase(), code]
+    );
     
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
     
     // Create user
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name, organization, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [email.toLowerCase(), passwordHash, name, organization, true]
+      'INSERT INTO users (email, password_hash, name, organization, is_active, email_verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [email.toLowerCase(), passwordHash, name, organization, true, true]
     );
     
     const user = result.rows[0];
@@ -106,20 +245,101 @@ app.post('/auth/register', async (req, res) => {
     );
     
     res.status(201).json({
-      message: "Benutzer erfolgreich registriert",
+      message: "Benutzer erfolgreich registriert und verifiziert",
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         organization: user.organization,
-        createdAt: user.created_at
+        isActive: user.is_active,
+        emailVerified: user.email_verified
       },
       accessToken,
       refreshToken
     });
-  } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: "Fehler bei der Email-Verifizierung" });
+  }
+});
+
+// Request password reset
+app.post('/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Check if user exists
+    const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "Kein Benutzer mit dieser E-Mail-Adresse gefunden" });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // Generate reset token
+    const resetToken = generateResetToken();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour
+    
+    // Store reset token
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, resetToken, expiresAt]
+    );
+    
+    // Send reset email
+    const emailSent = await sendPasswordResetEmail(email, resetToken);
+    if (!emailSent) {
+      return res.status(500).json({ error: "Fehler beim Senden der Reset-Email" });
+    }
+    
+    res.status(200).json({
+      message: "Passwort-Reset-Email wurde gesendet"
+    });
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    res.status(500).json({ error: "Fehler bei der Passwort-Reset-Anfrage" });
+  }
+});
+
+// Reset password
+app.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    
+    // Check reset token
+    const tokenResult = await pool.query(
+      'SELECT prt.*, u.* FROM password_reset_tokens prt JOIN users u ON prt.user_id = u.id WHERE prt.token = $1 AND prt.expires_at > NOW() AND prt.is_used = false',
+      [token]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: "Ungültiger oder abgelaufener Reset-Token" });
+    }
+    
+    const { user_id } = tokenResult.rows[0];
+    
+    // Mark token as used
+    await pool.query(
+      'UPDATE password_reset_tokens SET is_used = true WHERE token = $1',
+      [token]
+    );
+    
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    
+    // Update user password
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [passwordHash, user_id]
+    );
+    
+    res.status(200).json({
+      message: "Passwort erfolgreich zurückgesetzt"
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ error: "Fehler beim Zurücksetzen des Passworts" });
   }
 });
 

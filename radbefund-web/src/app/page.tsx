@@ -297,13 +297,75 @@ export default function Home() {
     const data = await response.json();
 
     if (!response.ok) {
+      if (data.canLogin) {
+        throw new Error(`${data.error} ${data.suggestion}`);
+      }
       throw new Error(data.error || 'Registrierung fehlgeschlagen');
     }
 
+    // Registration successful, but requires email verification
+    if (data.requiresVerification) {
+      // Don't close modal, stay in verification mode
+      return;
+    }
+
+    // If somehow we get here with full registration, handle it
     setUser(data.user);
     setAccessToken(data.accessToken);
     localStorage.setItem('user', JSON.stringify(data.user));
     localStorage.setItem('accessToken', data.accessToken);
+  };
+
+  const handleVerifyEmail = async (email: string, code: string, password: string, name: string, organization?: string) => {
+    const response = await fetch('http://localhost:3001/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, password, name, organization }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Email-Verifizierung fehlgeschlagen');
+    }
+
+    setUser(data.user);
+    setAccessToken(data.accessToken);
+    setRefreshToken(data.refreshToken);
+    setIsAuthenticated(true);
+    setShowAuthModal(false);
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    const response = await fetch('http://localhost:3001/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Fehler beim Senden der Reset-Email');
+    }
+
+    // Success message is handled in the modal
+  };
+
+  const handleResetPassword = async (token: string, newPassword: string) => {
+    const response = await fetch('http://localhost:3001/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Fehler beim Zurücksetzen des Passworts');
+    }
+
+    // Success message is handled in the modal
   };
 
   const handleLogout = () => {
@@ -589,6 +651,9 @@ export default function Home() {
           onClose={() => setShowAuthModal(false)}
           onLogin={handleLogin}
           onRegister={handleRegister}
+          onVerifyEmail={handleVerifyEmail}
+          onForgotPassword={handleForgotPassword}
+          onResetPassword={handleResetPassword}
           isDarkMode={isDarkMode}
         />
       </div>
@@ -914,6 +979,9 @@ export default function Home() {
         onClose={() => setShowAuthModal(false)}
         onLogin={handleLogin}
         onRegister={handleRegister}
+        onVerifyEmail={handleVerifyEmail}
+        onForgotPassword={handleForgotPassword}
+        onResetPassword={handleResetPassword}
         isDarkMode={isDarkMode}
       />
     </div>
