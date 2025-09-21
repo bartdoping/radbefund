@@ -1,0 +1,21 @@
+{
+  "name": "radbefund-plus",
+  "version": "1.0.0",
+  "description": "RadBefund+ - AI-powered radiology report optimization",
+  "main": "backend/simple-server.js",
+  "scripts": {
+    "start": "cd backend && node simple-server.js",
+    "install-deps": "cd backend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "radiology",
+    "ai",
+    "medical",
+    "reports"
+  ],
+  "author": "RadBefund+ Team",
+  "license": "MIT"
+}

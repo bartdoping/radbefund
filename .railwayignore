@@ -1,0 +1,11 @@
+frontend/
+radbefund-web/
+scripts/
+.DS_Store
+.gitignore
+DEPLOYMENT.md
+EMAIL_SETUP.md
+QUICK_DEPLOY.md
+docker-compose.simple.yml
+manifest.xml
+*.md
