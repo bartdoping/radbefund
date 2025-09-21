@@ -4,8 +4,5 @@ nixPkgs = ['nodejs', 'npm']
 [phases.install]
 cmds = ['npm install']
 
-[phases.build]
-cmds = ['echo "No build step required"']
-
 [start]
 cmd = 'node simple-server.js'
