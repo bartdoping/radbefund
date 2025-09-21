@@ -751,21 +751,35 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
       response = JSON.parse(jsonString);
       console.log('Successfully parsed JSON response:', response);
       
+      // Clean up markdown formatting from the response
+      const cleanResponse = {};
+      Object.keys(response).forEach(key => {
+        if (typeof response[key] === 'string') {
+          // Remove markdown underscores from compartment titles
+          cleanResponse[key] = response[key]
+            .replace(/__([^_]+)__/g, '$1')  // Remove double underscores around text
+            .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove double asterisks around text
+            .replace(/\*([^*]+)\*/g, '$1');  // Remove single asterisks around text
+        } else {
+          cleanResponse[key] = response[key];
+        }
+      });
+      
       // Filter response based on mode - only include fields for active levels
       const filteredResponse = {
-        befund: response.befund || aiResponse
+        befund: cleanResponse.befund || aiResponse
       };
       
-      if (mode >= '3' && response.beurteilung) {
-        filteredResponse.beurteilung = response.beurteilung;
+      if (mode >= '3' && cleanResponse.beurteilung) {
+        filteredResponse.beurteilung = cleanResponse.beurteilung;
       }
       
-      if (mode >= '4' && response.empfehlungen) {
-        filteredResponse.empfehlungen = response.empfehlungen;
+      if (mode >= '4' && cleanResponse.empfehlungen) {
+        filteredResponse.empfehlungen = cleanResponse.empfehlungen;
       }
       
-      if (mode >= '5' && response.zusatzinformationen) {
-        filteredResponse.zusatzinformationen = response.zusatzinformationen;
+      if (mode >= '5' && cleanResponse.zusatzinformationen) {
+        filteredResponse.zusatzinformationen = cleanResponse.zusatzinformationen;
       }
       
       response = filteredResponse;
