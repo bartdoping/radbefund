@@ -698,7 +698,6 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      temperature: 0.3,
       max_completion_tokens: 2000
     });
     
