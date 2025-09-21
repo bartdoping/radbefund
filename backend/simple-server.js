@@ -693,16 +693,39 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
     
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      max_completion_tokens: 2000
+      temperature: 0.3,
+      max_tokens: 2000
     });
     
     const aiResponse = completion.choices[0].message.content;
     console.log('AI Response received:', aiResponse);
+    
+    // Check if AI response is empty or null
+    if (!aiResponse || aiResponse.trim() === '') {
+      console.log('AI returned empty response, using fallback');
+      const fallbackResponse = {
+        befund: `BEFUND:\n\n${text}\n\nHinweis: Die AI-Verarbeitung war nicht verfügbar. Der ursprüngliche Text wurde unverändert übernommen.`
+      };
+      
+      if (mode >= '3') {
+        fallbackResponse.beurteilung = "BEURTEILUNG:\n\nEine Beurteilung konnte aufgrund technischer Probleme nicht generiert werden.";
+      }
+      
+      if (mode >= '4') {
+        fallbackResponse.empfehlungen = "EMPFEHLUNGEN:\n\nEmpfehlungen konnten aufgrund technischer Probleme nicht generiert werden.";
+      }
+      
+      if (mode >= '5') {
+        fallbackResponse.zusatzinformationen = "ZUSATZINFORMATIONEN:\n\nZusatzinformationen konnten aufgrund technischer Probleme nicht generiert werden.";
+      }
+      
+      return res.json({ blocked: false, answer: fallbackResponse });
+    }
     
     // Try to parse JSON response
     let response;
