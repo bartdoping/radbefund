@@ -617,7 +617,7 @@ WICHTIGE ANWEISUNGEN FÜR BILD-/SERIENNUMMERN:
 
 STRUKTURIERUNG DES BEFUNDES:
 - Der Befund-Abschnitt soll IMMER mit einer Voruntersuchungen-Sektion beginnen
-- Format: "Voruntersuchungen: [Angabe der Voruntersuchungen oder 'Keine relevanten Voruntersuchungen']"
+- Format: Direkt der Satz über Voruntersuchungen ohne "Voruntersuchungen:" Überschrift (z.B. "Keine relevanten Voruntersuchungen vorhanden" oder "Vergleichsaufnahme vom [Datum] zeigt...")
 - Direkt danach eine Leerzeile, dann der eigentliche Befund
 - Bei strukturierten Befunden (Level 3-5) sollen die Kompartimente durch Leerzeilen getrennt werden
 - Kompartiment-Titel können unterstrichen werden für bessere Lesbarkeit`;
