@@ -730,7 +730,25 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
     // Try to parse JSON response
     let response;
     try {
-      response = JSON.parse(aiResponse);
+      // First, try to extract JSON from markdown format if present
+      let jsonString = aiResponse;
+      if (aiResponse.includes('```json')) {
+        // Extract JSON from markdown code block
+        const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch && jsonMatch[1]) {
+          jsonString = jsonMatch[1].trim();
+          console.log('Extracted JSON from markdown:', jsonString);
+        }
+      } else if (aiResponse.includes('```')) {
+        // Extract from generic code block
+        const codeMatch = aiResponse.match(/```\s*([\s\S]*?)\s*```/);
+        if (codeMatch && codeMatch[1]) {
+          jsonString = codeMatch[1].trim();
+          console.log('Extracted JSON from code block:', jsonString);
+        }
+      }
+      
+      response = JSON.parse(jsonString);
       console.log('Successfully parsed JSON response:', response);
       
       // Filter response based on mode - only include fields for active levels
