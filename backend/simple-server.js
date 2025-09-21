@@ -579,7 +579,7 @@ app.post('/structured', authenticateToken, async (req, res) => {
   try {
     console.log('Structured endpoint called', { userId: req.user.userId, textLength: req.body.text?.length });
     
-    const { text, options } = req.body;
+    const { text, options, additionalInfo } = req.body;
     
     if (!text || !text.trim()) {
       return res.status(400).json({ error: "Befundtext ist erforderlich" });
@@ -622,9 +622,22 @@ STRUKTURIERUNG DES BEFUNDES:
 - Bei strukturierten Befunden (Level 3-5) sollen die Kompartimente durch Leerzeilen getrennt werden
 - Kompartiment-Titel können unterstrichen werden für bessere Lesbarkeit`;
 
-    let userPrompt = `Bitte optimieren Sie folgenden radiologischen Befund:\n\n${text}\n\n
+    let userPrompt = `Bitte optimieren Sie folgenden radiologischen Befund:\n\n${text}\n\n`;
 
-WICHTIG: Achten Sie besonders auf Bild-/Seriennummern im Befund. Diese MÜSSEN unbedingt beibehalten werden, da sie für die medizinische Dokumentation und Nachverfolgung essentiell sind.`;
+    // Add additional information if provided
+    if (additionalInfo && additionalInfo.length > 0) {
+      userPrompt += `\nZUSÄTZLICHE RELEVANTE INFORMATIONEN:\n`;
+      userPrompt += `Die folgenden Informationen wurden zusätzlich bereitgestellt und sollen bei der Befundoptimierung berücksichtigt werden, sofern sie relevant sind:\n\n`;
+      
+      additionalInfo.forEach((info, index) => {
+        userPrompt += `${index + 1}. ${info.type === 'vorbefund' ? 'VORBEFUND' : 'ZUSATZINFORMATION'}: ${info.title}\n`;
+        userPrompt += `${info.content}\n\n`;
+      });
+      
+      userPrompt += `WICHTIG: Nutzen Sie diese zusätzlichen Informationen nur, wenn sie für die Befundoptimierung relevant sind. Verknüpfen Sie relevante Aspekte miteinander, um ein vollständiges Bild zu erhalten. Ignorieren Sie irrelevante Informationen.\n\n`;
+    }
+
+    userPrompt += `WICHTIG: Achten Sie besonders auf Bild-/Seriennummern im Befund. Diese MÜSSEN unbedingt beibehalten werden, da sie für die medizinische Dokumentation und Nachverfolgung essentiell sind.`;
     
     // Add mode-specific instructions
     switch (mode) {

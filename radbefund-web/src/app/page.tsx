@@ -4,6 +4,136 @@ import { useState, useEffect } from 'react';
 import AuthModal from './components/AuthModal';
 import LayoutSelector from './components/LayoutSelector';
 
+// Additional Info Modal Component
+interface AdditionalInfoModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (title: string, content: string) => void;
+  type: 'vorbefund' | 'zusatzinfo';
+  isDarkMode: boolean;
+}
+
+function AdditionalInfoModal({ isOpen, onClose, onSave, type, isDarkMode }: AdditionalInfoModalProps) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (title.trim() && content.trim()) {
+      onSave(title.trim(), content.trim());
+      setTitle('');
+      setContent('');
+    }
+  };
+
+  const handleClose = () => {
+    setTitle('');
+    setContent('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  const typeLabels = {
+    vorbefund: {
+      title: 'Vorbefund hinzufügen',
+      description: 'Fügen Sie Vorbefunde von Voruntersuchungen hinzu (z.B. CT, MRT, Röntgen)',
+      placeholder: 'z.B. CT Thorax vom 15.01.2024'
+    },
+    zusatzinfo: {
+      title: 'Zusatzinformation hinzufügen',
+      description: 'Fügen Sie weitere relevante Informationen hinzu (Laborbefunde, Pathologie, OP-Berichte, etc.)',
+      placeholder: 'z.B. Laborbefund, Pathologiebefund, OP-Bericht'
+    }
+  };
+
+  const labels = typeLabels[type];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden`}>
+        <div className={`${isDarkMode ? 'border-gray-700' : 'border-gray-200'} border-b p-6`}>
+          <div className="flex justify-between items-center">
+            <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              {labels.title}
+            </h2>
+            <button
+              onClick={handleClose}
+              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {labels.description}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Titel
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={labels.placeholder}
+              className={`w-full p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+              }`}
+              required
+            />
+          </div>
+
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Inhalt
+            </label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Fügen Sie hier den vollständigen Inhalt ein..."
+              rows={8}
+              className={`w-full p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+              }`}
+              required
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={handleClose}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isDarkMode 
+                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim() || !content.trim()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Hinzufügen
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Structured Result Display Component
 interface StructuredResultDisplayProps {
   result: string;
@@ -145,6 +275,14 @@ interface Layout {
   isDefault?: boolean;
 }
 
+interface AdditionalInfo {
+  id: string;
+  type: 'vorbefund' | 'zusatzinfo';
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
 interface BefundHistory {
   id: string;
   title: string;
@@ -152,6 +290,7 @@ interface BefundHistory {
   result: string;
   workflowOptions: WorkflowOptions;
   selectedLayout: string | null;
+  additionalInfo: AdditionalInfo[];
   createdAt: string;
 }
 
@@ -192,6 +331,11 @@ export default function Home() {
 
   // Dark mode state
   const [isDarkMode, setIsDarkMode] = useState(true);
+
+  // Additional info state
+  const [additionalInfo, setAdditionalInfo] = useState<AdditionalInfo[]>([]);
+  const [showVorbefundModal, setShowVorbefundModal] = useState(false);
+  const [showZusatzinfoModal, setShowZusatzinfoModal] = useState(false);
 
   // Loading progress state
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -516,6 +660,7 @@ export default function Home() {
       result,
       workflowOptions: { ...workflowOptions },
       selectedLayout,
+      additionalInfo: [...additionalInfo],
       createdAt: new Date().toISOString(),
     };
     
@@ -530,8 +675,25 @@ export default function Home() {
       setResult(befund.result);
       setWorkflowOptions(befund.workflowOptions);
       setSelectedLayout(befund.selectedLayout);
+      setAdditionalInfo(befund.additionalInfo || []);
       setSelectedBefund(befundId);
     }
+  };
+
+  const addAdditionalInfo = (type: 'vorbefund' | 'zusatzinfo', title: string, content: string) => {
+    const newInfo: AdditionalInfo = {
+      id: Date.now().toString(),
+      type,
+      title,
+      content,
+      createdAt: new Date().toISOString()
+    };
+    
+    setAdditionalInfo(prev => [...prev, newInfo]);
+  };
+
+  const removeAdditionalInfo = (id: string) => {
+    setAdditionalInfo(prev => prev.filter(info => info.id !== id));
   };
 
   const deleteBefundFromHistory = (befundId: string) => {
@@ -672,6 +834,7 @@ export default function Home() {
             includeRecommendations: true,
           },
           allowContentChanges: false,
+          additionalInfo: additionalInfo,
         }),
       });
 
@@ -819,6 +982,7 @@ export default function Home() {
                 setError('');
                 setSelectedLayout(null);
                 setSelectedBefund(null);
+                setAdditionalInfo([]);
                 setWorkflowOptions({
                   option1: true,
                   option2: false,
@@ -962,37 +1126,126 @@ export default function Home() {
 
         {/* Content Area */}
         <div className="flex-1 p-6 space-y-6">
-          {/* Workflow Options */}
-          <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-6`}>
-            <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Workflow-Optionen
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[
-                { key: 'option1', label: 'Sprachliche Korrektur', always: true },
-                { key: 'option2', label: 'Terminologie verbessern' },
-                { key: 'option3', label: 'Umstrukturierung + Beurteilung' },
-                { key: 'option4', label: 'Klinische Empfehlung' },
-                { key: 'option5', label: 'Zusatzinfos/DDx' },
-              ].map(({ key, label, always }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleOption(key as keyof WorkflowOptions)}
-                  disabled={always}
-                  className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                    workflowOptions[key as keyof WorkflowOptions]
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                      : isDarkMode
-                        ? 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  } ${always ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  {label}
-                  {workflowOptions[key as keyof WorkflowOptions] && (
-                    <span className="ml-2">✓</span>
-                  )}
-                </button>
-              ))}
+          {/* Workflow Options and Additional Info Container */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Workflow Options */}
+            <div className="lg:col-span-2">
+              <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-6`}>
+                <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Workflow-Optionen
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { key: 'option1', label: 'Sprachliche Korrektur', always: true },
+                    { key: 'option2', label: 'Terminologie verbessern' },
+                    { key: 'option3', label: 'Umstrukturierung + Beurteilung' },
+                    { key: 'option4', label: 'Klinische Empfehlung' },
+                    { key: 'option5', label: 'Zusatzinfos/DDx' },
+                  ].map(({ key, label, always }) => (
+                    <button
+                      key={key}
+                      onClick={() => toggleOption(key as keyof WorkflowOptions)}
+                      disabled={always}
+                      className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                        workflowOptions[key as keyof WorkflowOptions]
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                          : isDarkMode
+                            ? 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      } ${always ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {label}
+                      {workflowOptions[key as keyof WorkflowOptions] && (
+                        <span className="ml-2">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Info Container */}
+            <div className="lg:col-span-1">
+              <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-6`}>
+                <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Zusätzliche Informationen
+                </h3>
+                
+                {/* Add Buttons */}
+                <div className="grid grid-cols-1 gap-3 mb-4">
+                  <button
+                    onClick={() => setShowVorbefundModal(true)}
+                    className={`p-4 rounded-lg border-2 border-dashed text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                      isDarkMode
+                        ? 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500 hover:bg-gray-600'
+                        : 'border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Vorbefunde hinzufügen</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowZusatzinfoModal(true)}
+                    className={`p-4 rounded-lg border-2 border-dashed text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                      isDarkMode
+                        ? 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500 hover:bg-gray-600'
+                        : 'border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Zusatzinfos hinzufügen</span>
+                  </button>
+                </div>
+
+                {/* Additional Info List */}
+                {additionalInfo.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Hinzugefügte Informationen:
+                    </h4>
+                    {additionalInfo.map((info) => (
+                      <div
+                        key={info.id}
+                        className={`p-3 rounded-lg border text-sm ${
+                          isDarkMode
+                            ? 'bg-gray-700 border-gray-600 text-gray-200'
+                            : 'bg-gray-50 border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                info.type === 'vorbefund'
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              }`}>
+                                {info.type === 'vorbefund' ? 'Vorbefund' : 'Zusatzinfo'}
+                              </span>
+                            </div>
+                            <div className="font-medium truncate">{info.title}</div>
+                            <div className="text-xs opacity-75 truncate">{info.content.substring(0, 50)}...</div>
+                          </div>
+                          <button
+                            onClick={() => removeAdditionalInfo(info.id)}
+                            className={`ml-2 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors`}
+                            title="Entfernen"
+                          >
+                            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1116,6 +1369,34 @@ export default function Home() {
         onResetPassword={handleResetPassword}
         isDarkMode={isDarkMode}
       />
+
+      {/* Vorbefund Modal */}
+      {showVorbefundModal && (
+        <AdditionalInfoModal
+          isOpen={showVorbefundModal}
+          onClose={() => setShowVorbefundModal(false)}
+          onSave={(title, content) => {
+            addAdditionalInfo('vorbefund', title, content);
+            setShowVorbefundModal(false);
+          }}
+          type="vorbefund"
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* Zusatzinfo Modal */}
+      {showZusatzinfoModal && (
+        <AdditionalInfoModal
+          isOpen={showZusatzinfoModal}
+          onClose={() => setShowZusatzinfoModal(false)}
+          onSave={(title, content) => {
+            addAdditionalInfo('zusatzinfo', title, content);
+            setShowZusatzinfoModal(false);
+          }}
+          type="zusatzinfo"
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }
