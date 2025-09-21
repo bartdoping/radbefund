@@ -702,11 +702,13 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
     });
     
     const aiResponse = completion.choices[0].message.content;
+    console.log('AI Response received:', aiResponse);
     
     // Try to parse JSON response
     let response;
     try {
       response = JSON.parse(aiResponse);
+      console.log('Successfully parsed JSON response:', response);
       
       // Filter response based on mode - only include fields for active levels
       const filteredResponse = {
@@ -727,21 +729,46 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
       
       response = filteredResponse;
     } catch (parseError) {
-      // If JSON parsing fails, create a structured response
+      console.log('JSON parsing failed:', parseError.message);
+      console.log('Raw AI response:', aiResponse);
+      
+      // If JSON parsing fails, try to extract content from the response
+      // Look for common patterns in the AI response
+      let befund = aiResponse;
+      let beurteilung = null;
+      let empfehlungen = null;
+      let zusatzinformationen = null;
+      
+      // Try to split by common section headers
+      const sections = aiResponse.split(/\n(?=BEFUND:|BEURTEILUNG:|EMPFEHLUNGEN:|ZUSATZINFORMATIONEN:|DIFFERENTIALDIAGNOSEN:)/i);
+      
+      sections.forEach(section => {
+        const trimmedSection = section.trim();
+        if (trimmedSection.toLowerCase().includes('befund:')) {
+          befund = trimmedSection.replace(/^.*?befund:\s*/i, '').trim();
+        } else if (trimmedSection.toLowerCase().includes('beurteilung:')) {
+          beurteilung = trimmedSection.replace(/^.*?beurteilung:\s*/i, '').trim();
+        } else if (trimmedSection.toLowerCase().includes('empfehlungen:')) {
+          empfehlungen = trimmedSection.replace(/^.*?empfehlungen:\s*/i, '').trim();
+        } else if (trimmedSection.toLowerCase().includes('zusatzinformationen:') || trimmedSection.toLowerCase().includes('differentialdiagnosen:')) {
+          zusatzinformationen = trimmedSection.replace(/^.*?(zusatzinformationen|differentialdiagnosen):\s*/i, '').trim();
+        }
+      });
+      
       response = {
-        befund: aiResponse
+        befund: befund || aiResponse
       };
       
-      if (mode >= '3') {
-        response.beurteilung = "Beurteilung wurde generiert.";
+      if (mode >= '3' && beurteilung) {
+        response.beurteilung = beurteilung;
       }
       
-      if (mode >= '4') {
-        response.empfehlungen = "Klinische Empfehlungen wurden generiert.";
+      if (mode >= '4' && empfehlungen) {
+        response.empfehlungen = empfehlungen;
       }
       
-      if (mode >= '5') {
-        response.zusatzinformationen = "Zusätzliche Informationen wurden generiert.";
+      if (mode >= '5' && zusatzinformationen) {
+        response.zusatzinformationen = zusatzinformationen;
       }
     }
     
