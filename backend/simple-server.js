@@ -613,7 +613,14 @@ WICHTIGE ANWEISUNGEN FÜR BILD-/SERIENNUMMERN:
 - Wenn der Nutzer Bild-/Seriennummern angibt (z.B. "Bild 1/5", "Serie 2", "Slice 15/20"), MÜSSEN diese UNBEDINGT beibehalten werden
 - Diese Nummern sind für die Nachverfolgung und Dokumentation essentiell
 - Fügen Sie sie an der entsprechenden Stelle im optimierten Befund ein
-- Ändern Sie NICHT die Nummerierung oder Reihenfolge`;
+- Ändern Sie NICHT die Nummerierung oder Reihenfolge
+
+STRUKTURIERUNG DES BEFUNDES:
+- Der Befund-Abschnitt soll IMMER mit einer Voruntersuchungen-Sektion beginnen
+- Format: "Voruntersuchungen: [Angabe der Voruntersuchungen oder 'Keine relevanten Voruntersuchungen']"
+- Direkt danach eine Leerzeile, dann der eigentliche Befund
+- Bei strukturierten Befunden (Level 3-5) sollen die Kompartimente durch Leerzeilen getrennt werden
+- Kompartiment-Titel können unterstrichen werden für bessere Lesbarkeit`;
 
     let userPrompt = `Bitte optimieren Sie folgenden radiologischen Befund:\n\n${text}\n\n
 

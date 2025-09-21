@@ -4,6 +4,130 @@ import { useState, useEffect } from 'react';
 import AuthModal from './components/AuthModal';
 import LayoutSelector from './components/LayoutSelector';
 
+// Structured Result Display Component
+interface StructuredResultDisplayProps {
+  result: string;
+  isDarkMode: boolean;
+}
+
+function StructuredResultDisplay({ result, isDarkMode }: StructuredResultDisplayProps) {
+  // Parse the result to extract different sections
+  const parseResult = (text: string) => {
+    const sections: { [key: string]: string } = {};
+    
+    // Split by section headers
+    const sectionRegex = /\*\*(VERBESSERTER BEFUND|BEFUND|BEURTEILUNG|KLINISCHE EMPFEHLUNGEN|ZUSATZINFORMATIONEN.*?):\*\*/gi;
+    const parts = text.split(sectionRegex);
+    
+    for (let i = 1; i < parts.length; i += 2) {
+      const sectionName = parts[i].toLowerCase();
+      const sectionContent = parts[i + 1]?.trim() || '';
+      
+      if (sectionName.includes('befund') || sectionName.includes('verbesserter')) {
+        sections.befund = sectionContent;
+      } else if (sectionName.includes('beurteilung')) {
+        sections.beurteilung = sectionContent;
+      } else if (sectionName.includes('empfehlung')) {
+        sections.empfehlungen = sectionContent;
+      } else if (sectionName.includes('zusatz') || sectionName.includes('differential')) {
+        sections.zusatzinformationen = sectionContent;
+      }
+    }
+    
+    return sections;
+  };
+
+  const sections = parseResult(result);
+  
+  const copyToClipboard = async (text: string, sectionName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const renderSection = (title: string, content: string, sectionKey: string) => {
+    if (!content) return null;
+    
+    // Special handling for Befund section to format Voruntersuchungen
+    const formatBefundContent = (text: string) => {
+      // Check if Voruntersuchungen section exists
+      const voruntersuchungenMatch = text.match(/^Voruntersuchungen:\s*(.+?)(?:\n\n|\n$)/m);
+      
+      if (voruntersuchungenMatch) {
+        const voruntersuchungen = voruntersuchungenMatch[1];
+        const restOfBefund = text.replace(/^Voruntersuchungen:\s*.+?(?:\n\n|\n$)/m, '').trim();
+        
+        return (
+          <div>
+            <div className="mb-2">
+              <span className={`font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                Voruntersuchungen:
+              </span>
+              <span className={`ml-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                {voruntersuchungen}
+              </span>
+            </div>
+            {restOfBefund && (
+              <div className="mt-3">
+                <pre className="whitespace-pre-wrap font-mono text-sm">{restOfBefund}</pre>
+              </div>
+            )}
+          </div>
+        );
+      }
+      
+      // If no Voruntersuchungen section, display as normal
+      return <pre className="whitespace-pre-wrap font-mono text-sm">{text}</pre>;
+    };
+    
+    return (
+      <div key={sectionKey} className={`${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4 mb-4`}>
+        <div className="flex justify-between items-center mb-2">
+          <h4 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {title}:
+          </h4>
+          <button
+            onClick={() => copyToClipboard(content, sectionKey)}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              isDarkMode 
+                ? 'bg-gray-600 hover:bg-gray-500 text-gray-200' 
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+            }`}
+          >
+            Kopieren
+          </button>
+        </div>
+        <div className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+          {sectionKey === 'befund' ? formatBefundContent(content) : <pre className="whitespace-pre-wrap font-mono">{content}</pre>}
+        </div>
+      </div>
+    );
+  };
+
+  // If no structured sections found, show as plain text
+  if (Object.keys(sections).length === 0) {
+    return (
+      <div className={`${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4`}>
+        <pre className={`whitespace-pre-wrap text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+          {result}
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {renderSection('Befund', sections.befund, 'befund')}
+      {renderSection('Beurteilung', sections.beurteilung, 'beurteilung')}
+      {renderSection('Klinische Empfehlungen', sections.empfehlungen, 'empfehlungen')}
+      {renderSection('Zusatzinformationen / Differentialdiagnosen', sections.zusatzinformationen, 'zusatzinformationen')}
+    </div>
+  );
+}
+
 interface WorkflowOptions {
   option1: boolean;
   option2: boolean;
@@ -952,11 +1076,10 @@ export default function Home() {
               <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                 Optimierter Befund
               </h3>
-              <div className={`${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4`}>
-                <pre className={`whitespace-pre-wrap text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {result}
-                </pre>
-              </div>
+              
+              {/* Structured Result Display */}
+              <StructuredResultDisplay result={result} isDarkMode={isDarkMode} />
+              
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => navigator.clipboard.writeText(result)}
@@ -966,7 +1089,7 @@ export default function Home() {
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                   }`}
                 >
-                  Kopieren
+                  Gesamten Befund kopieren
                 </button>
               </div>
             </div>
