@@ -86,16 +86,16 @@ export default function AuthModal({ isOpen, onClose, onLogin, onRegister, onVeri
         setSuccess('Passwort-Reset-Email wurde gesendet. Bitte überprüfen Sie Ihr Postfach.');
       }
     } catch (err: any) {
-        const errorMessage = err.message || 'Ein Fehler ist aufgetreten';
-        setError(errorMessage);
-        
-        // Wenn es sich um ein bereits existierendes Konto handelt, zeige einen Link zur Anmeldung
-        if (errorMessage.includes('bereits registriert') || errorMessage.includes('bereits existiert')) {
-          setError(errorMessage + ' Klicken Sie hier, um sich stattdessen anzumelden.');
-        }
-      } finally {
-        setLoading(false);
+      const errorMessage = err.message || 'Ein Fehler ist aufgetreten';
+      setError(errorMessage);
+      
+      // Wenn es sich um ein bereits existierendes Konto handelt, zeige einen Link zur Anmeldung
+      if (errorMessage.includes('bereits registriert') || errorMessage.includes('bereits existiert')) {
+        setError(errorMessage + ' Klicken Sie hier, um sich stattdessen anzumelden.');
       }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
