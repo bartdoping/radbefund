@@ -120,4 +120,4 @@ coverage/
 docker-compose.override.yml
 
 # Monitoring
-monitoring/data/
+monitoring/data/backend/.env
