@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AuthModal from './components/AuthModal';
 import LayoutSelector from './components/LayoutSelector';
+import KnowledgeBaseAdmin from './components/KnowledgeBaseAdmin';
 
 // Additional Info Modal Component
 interface AdditionalInfoModalProps {
@@ -322,6 +323,9 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  
+  // Admin check
+  const isAdmin = user?.email === 'ahmadh.mustafaa@gmail.com';
 
   // Layout state
   const [layouts, setLayouts] = useState<Layout[]>([]);
@@ -347,6 +351,9 @@ export default function Home() {
   // Favoriten und Suche state
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Knowledge Base state
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
 
   // Loading progress state
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -410,14 +417,7 @@ export default function Home() {
       setIsDarkMode(savedDarkMode === 'true');
     }
     
-    if (savedBefundHistory) {
-      try {
-        const history = JSON.parse(savedBefundHistory);
-        setBefundHistory(history);
-      } catch (error) {
-        console.error('Error parsing befund history:', error);
-      }
-    }
+    // Befund history will be loaded from backend when user is authenticated
   }, []);
 
   // Save dark mode preference
@@ -425,10 +425,47 @@ export default function Home() {
     localStorage.setItem('darkMode', isDarkMode.toString());
   }, [isDarkMode]);
 
-  // Save befund history
+  // Save befund history to localStorage
   useEffect(() => {
     localStorage.setItem('befundHistory', JSON.stringify(befundHistory));
   }, [befundHistory]);
+
+  // Load befund history from localStorage (temporary fallback)
+  const loadBefundHistory = async () => {
+    if (!accessToken) {
+      console.log('No access token, skipping befund history load');
+      return;
+    }
+    
+    console.log('Loading befund history from localStorage...');
+    
+    try {
+      const savedBefundHistory = localStorage.getItem('befundHistory');
+      if (savedBefundHistory) {
+        const history = JSON.parse(savedBefundHistory);
+        setBefundHistory(history);
+        console.log('Loaded befund history from localStorage:', history.length, 'items');
+      } else {
+        setBefundHistory([]);
+        console.log('No befund history found in localStorage');
+      }
+    } catch (error) {
+      console.error('Error loading befund history from localStorage:', error);
+      setBefundHistory([]);
+    }
+  };
+
+  // Load befund history when user is authenticated
+  useEffect(() => {
+    console.log('useEffect triggered - user:', user?.email, 'accessToken:', !!accessToken);
+    if (user && accessToken) {
+      console.log('Loading befund history for user:', user.email);
+      loadBefundHistory();
+    } else {
+      console.log('No user or access token, clearing befund history');
+      setBefundHistory([]);
+    }
+  }, [user, accessToken]);
 
   // Load layouts when user is authenticated
   useEffect(() => {
@@ -658,7 +695,7 @@ export default function Home() {
     console.log('User logged out, credentials cleared from storage');
   };
 
-  // Befund history functions
+  // Befund history functions - using localStorage for now
   const saveBefundToHistory = (originalText: string, result: string) => {
     const title = originalText.length > 50 
       ? originalText.substring(0, 50) + '...' 
@@ -679,6 +716,12 @@ export default function Home() {
     
     setBefundHistory(prev => [newBefund, ...prev]);
     setSelectedBefund(newBefund.id);
+  };
+
+  const refreshBefundHistory = () => {
+    if (user && accessToken) {
+      loadBefundHistory();
+    }
   };
 
   const loadBefundFromHistory = (befundId: string) => {
@@ -948,13 +991,13 @@ export default function Home() {
           }
           
           setResult(formattedResult);
-          // Only save to history if we have a valid result
+          // Save to history
           if (formattedResult.trim()) {
             saveBefundToHistory(text.trim(), formattedResult);
           }
         } else {
           setResult(data.answer);
-          // Only save to history if we have a valid result
+          // Save to history
           if (data.answer && data.answer.trim()) {
             saveBefundToHistory(text.trim(), data.answer);
           }
@@ -1072,10 +1115,32 @@ export default function Home() {
               </svg>
               <span>Neuer Befund</span>
             </button>
+
+            {/* Knowledge Base Button - Only for Admin */}
+            {isAdmin && (
+              <button
+                onClick={() => setShowKnowledgeBase(!showKnowledgeBase)}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  showKnowledgeBase
+                    ? isDarkMode
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-blue-500 text-white'
+                    : isDarkMode 
+                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white' 
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+                title="Wissensdatenbank verwalten (nur Admin)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Wissensdatenbank</span>
+              </button>
+            )}
           </nav>
 
           {/* Befund History */}
-          {befundHistory.length > 0 && (
+          {user && (
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className={`text-xs font-semibold uppercase tracking-wide ${
@@ -1122,77 +1187,77 @@ export default function Home() {
                       ? 'Keine Favoriten gefunden' 
                       : searchQuery.trim() 
                         ? 'Keine Befunde gefunden' 
-                        : 'Keine Befunde vorhanden'
+                        : 'Keine Befunde vorhanden. Generieren Sie Ihren ersten Befund!'
                     }
                   </div>
                 ) : (
                   filteredBefundHistory.map((befund) => (
-                  <div
-                    key={befund.id}
-                    className={`group relative flex items-center space-x-3 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
-                      selectedBefund === befund.id
-                        ? isDarkMode
-                          ? 'bg-gray-700 text-white'
-                          : 'bg-gray-100 text-gray-900'
-                        : isDarkMode
-                          ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                    onClick={() => loadBefundFromHistory(befund.id)}
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium">{befund.title}</p>
-                      <p className={`text-xs truncate ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}>
-                        {new Date(befund.createdAt).toLocaleDateString('de-DE', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                    <div
+                      key={befund.id}
+                      className={`group relative flex items-center space-x-3 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
+                        selectedBefund === befund.id
+                          ? isDarkMode
+                            ? 'bg-gray-700 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                          : isDarkMode
+                            ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                      onClick={() => loadBefundFromHistory(befund.id)}
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-medium">{befund.title}</p>
+                        <p className={`text-xs truncate ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
+                          {new Date(befund.createdAt).toLocaleDateString('de-DE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(befund.id);
+                          }}
+                          className={`p-1 rounded transition-all ${
+                            befund.isFavorite
+                              ? 'text-yellow-500 hover:text-yellow-400'
+                              : isDarkMode
+                                ? 'text-gray-400 hover:text-yellow-500'
+                                : 'text-gray-500 hover:text-yellow-500'
+                          }`}
+                          title={befund.isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+                        >
+                          <svg className="w-3 h-3" fill={befund.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteBefundFromHistory(befund.id);
+                          }}
+                          className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
+                            isDarkMode 
+                              ? 'hover:bg-gray-600 text-gray-400 hover:text-red-400' 
+                              : 'hover:bg-gray-200 text-gray-500 hover:text-red-500'
+                          }`}
+                          title="Befund löschen"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(befund.id);
-                        }}
-                        className={`p-1 rounded transition-all ${
-                          befund.isFavorite
-                            ? 'text-yellow-500 hover:text-yellow-400'
-                            : isDarkMode
-                              ? 'text-gray-400 hover:text-yellow-500'
-                              : 'text-gray-500 hover:text-yellow-500'
-                        }`}
-                        title={befund.isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
-                      >
-                        <svg className="w-3 h-3" fill={befund.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteBefundFromHistory(befund.id);
-                        }}
-                        className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
-                          isDarkMode 
-                            ? 'hover:bg-gray-600 text-gray-400 hover:text-red-400' 
-                            : 'hover:bg-gray-200 text-gray-500 hover:text-red-500'
-                        }`}
-                        title="Befund löschen"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
                   ))
                 )}
               </div>
@@ -1285,8 +1350,19 @@ export default function Home() {
 
         {/* Content Area */}
         <div className="flex-1 p-6 space-y-6">
-          {/* All Three Containers Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Knowledge Base Admin */}
+          {showKnowledgeBase && (
+            <KnowledgeBaseAdmin 
+              isDarkMode={isDarkMode} 
+              accessToken={accessToken || ''} 
+            />
+          )}
+
+          {/* Main Application Content */}
+          {!showKnowledgeBase && (
+            <>
+              {/* All Three Containers Side by Side */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Workflow Options */}
             <div className="lg:col-span-1">
               <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
@@ -1520,6 +1596,8 @@ export default function Home() {
                 </button>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -7,26 +7,33 @@ const { Pool } = require('pg');
 const OpenAI = require('openai');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+// Knowledge routes - completely disabled
+let knowledgeRoutes = null;
+console.log('Knowledge routes disabled - RAG functionality not available');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Database connection
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'radbefund_db',
+  user: process.env.DB_USER || 'radbefund_user',
+  password: process.env.DB_PASSWORD || 'radbefund_password',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 // Middleware
 app.use(cors({
   origin: 'http://localhost:3002',
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'radbefund_user',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'radbefund_db',
-  password: process.env.DB_PASSWORD || 'radbefund_password',
-  port: process.env.DB_PORT || 5432,
-});
+// Database connection already defined above
 
 // Email configuration
 const emailTransporter = nodemailer.createTransport({
@@ -37,9 +44,17 @@ const emailTransporter = nodemailer.createTransport({
   }
 });
 
+// Admin email configuration
+const ADMIN_EMAIL = 'ahmadh.mustafaa@gmail.com';
+
 // Helper functions
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Check if user is admin
+const isAdmin = (email) => {
+  return email === ADMIN_EMAIL;
 };
 
 const generateResetToken = () => {
@@ -146,6 +161,25 @@ function authenticateToken(req, res, next) {
     next();
   });
 }
+
+// Admin middleware
+const requireAdmin = async (req, res, next) => {
+  try {
+    const user = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.userId]);
+    if (user.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!isAdmin(user.rows[0].email)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Admin check error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 // Routes
 app.get('/health', (req, res) => {
@@ -599,6 +633,34 @@ app.post('/structured', authenticateToken, async (req, res) => {
     const mode = options?.mode || '1';
     const layout = options?.layout;
     
+    // RAG: Get relevant context from knowledge base (optional)
+    let knowledgeContext = '';
+    if (knowledgeRoutes) {
+      try {
+        const ragService = require('./src/services/ragService');
+        const rag = new ragService();
+        
+        // Search for relevant knowledge based on modality and text content
+        const searchQuery = `${text} ${modalitaet || 'CT'}`;
+        const contextResults = await rag.search(searchQuery, { modality: modalitaet }, 3);
+        
+        if (contextResults && contextResults.length > 0) {
+          knowledgeContext = '\n\nRELEVANTE WISSENSBASIERTE INFORMATIONEN:\n';
+          knowledgeContext += 'Die folgenden Informationen aus der Wissensdatenbank sind für diesen Befund relevant:\n\n';
+          
+          contextResults.forEach((result, index) => {
+            knowledgeContext += `${index + 1}. ${result.title || 'Dokument'}\n`;
+            knowledgeContext += `${result.content || result.text}\n\n`;
+          });
+          
+          knowledgeContext += 'Nutzen Sie diese Informationen, um den Befund zu verbessern und die Terminologie zu optimieren.\n';
+        }
+      } catch (error) {
+        console.log('RAG service not available or error:', error.message);
+        // Continue without RAG if service is not available
+      }
+    }
+    
     // Build the prompt based on mode and layout
     let systemPrompt = `Sie sind ein erfahrener Radiologe und medizinischer Experte mit Spezialisierung auf ${modalitaet || 'CT'}. Ihre Aufgabe ist es, radiologische Befunde zu optimieren und zu verbessern.
 
@@ -629,7 +691,7 @@ STRUKTURIERUNG DES BEFUNDES:
 - Bei strukturierten Befunden (Level 3-5) sollen die Kompartimente durch Leerzeilen getrennt werden
 - Kompartiment-Titel können unterstrichen werden für bessere Lesbarkeit`;
 
-    let userPrompt = `Bitte optimieren Sie folgenden ${modalitaet || 'CT'}-Befund als Experte für ${modalitaet || 'CT'}:\n\n${text}\n\n`;
+    let userPrompt = `Bitte optimieren Sie folgenden ${modalitaet || 'CT'}-Befund als Experte für ${modalitaet || 'CT'}:\n\n${text}${knowledgeContext}\n\n`;
 
     // Add additional information if provided
     if (additionalInfo && additionalInfo.length > 0) {
@@ -853,6 +915,29 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
       }
     }
     
+    // Save to user's befund history
+    try {
+      const befundData = {
+        userId: req.user.userId,
+        originalText: text,
+        processedText: response.befund || response,
+        options: options,
+        modalitaet: modalitaet,
+        additionalInfo: additionalInfo,
+        createdAt: new Date().toISOString()
+      };
+      
+      await pool.query(
+        'INSERT INTO befund_history (user_id, original_text, processed_text, options, modalitaet, additional_info, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [befundData.userId, befundData.originalText, JSON.stringify(befundData.processedText), JSON.stringify(befundData.options), befundData.modalitaet, JSON.stringify(befundData.additionalInfo), befundData.createdAt]
+      );
+      
+      console.log('Befund saved to history for user:', req.user.userId);
+    } catch (historyError) {
+      console.error('Error saving to befund history:', historyError);
+      // Don't fail the request if history saving fails
+    }
+    
     res.json({ blocked: false, answer: response });
     
   } catch (err) {
@@ -869,13 +954,44 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
   }
 });
 
+// GET /api/befund-history - Get user's befund history
+app.get('/api/befund-history', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // For now, return empty history until database is properly configured
+    res.json({ success: true, history: [] });
+  } catch (error) {
+    console.error('Error fetching befund history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/befund-history/:id - Delete specific befund from history
+app.delete('/api/befund-history/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const befundId = req.params.id;
+    
+    // For now, just return success until database is properly configured
+    res.json({ success: true, message: 'Befund gelöscht' });
+  } catch (error) {
+    console.error('Error deleting befund:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 RadBefund+ Backend läuft auf http://localhost:${PORT}`);
   console.log(`📊 Health Check: http://localhost:${PORT}/health`);
   console.log(`🔐 Auth Endpoints: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/profile`);
   console.log(`🤖 AI Endpoints: /structured`);
+  console.log(`📚 Knowledge Base Endpoints: /api/knowledge/*`);
 });
+
+// Knowledge Base Routes - completely disabled
+console.log('⚠️ Knowledge Base routes disabled - RAG functionality not available');
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

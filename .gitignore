@@ -121,3 +121,5 @@ docker-compose.override.yml
 
 # Monitoring
 monitoring/data/backend/.env
+backend/node_modules/
+radbefund-web/node_modules/
