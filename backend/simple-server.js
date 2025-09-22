@@ -579,7 +579,7 @@ app.post('/structured', authenticateToken, async (req, res) => {
   try {
     console.log('Structured endpoint called', { userId: req.user.userId, textLength: req.body.text?.length });
     
-    const { text, options, additionalInfo } = req.body;
+    const { text, options, additionalInfo, modalitaet } = req.body;
     
     if (!text || !text.trim()) {
       return res.status(400).json({ error: "Befundtext ist erforderlich" });
@@ -600,7 +600,14 @@ app.post('/structured', authenticateToken, async (req, res) => {
     const layout = options?.layout;
     
     // Build the prompt based on mode and layout
-    let systemPrompt = `Sie sind ein erfahrener Radiologe und medizinischer Experte. Ihre Aufgabe ist es, radiologische Befunde zu optimieren und zu verbessern.
+    let systemPrompt = `Sie sind ein erfahrener Radiologe und medizinischer Experte mit Spezialisierung auf ${modalitaet || 'CT'}. Ihre Aufgabe ist es, radiologische Befunde zu optimieren und zu verbessern.
+
+MODALITÄTSSPEZIFISCHE EXPERTISE:
+- Sie sind ein Experte für ${modalitaet || 'CT'} und haben umfassendes Wissen über diese bildgebende Modalität
+- Sie kennen alle relevanten Fachbegriffe, Glossare und Literatur für ${modalitaet || 'CT'}
+- Sie verstehen die spezifischen technischen Parameter, Indikationen und Limitationen von ${modalitaet || 'CT'}
+- Sie können Befunde in der Fachsprache dieser Modalität präzise und korrekt formulieren
+- Sie berücksichtigen modalitätsspezifische Artefakte, Kontraindikationen und Besonderheiten
 
 KRITISCHE ANWEISUNGEN FÜR LAYOUT-TEMPLATES:
 - Wenn ein Layout-Template verwendet wird, BEHALTEN Sie die Kompartiment-Struktur EXAKT bei
@@ -622,7 +629,7 @@ STRUKTURIERUNG DES BEFUNDES:
 - Bei strukturierten Befunden (Level 3-5) sollen die Kompartimente durch Leerzeilen getrennt werden
 - Kompartiment-Titel können unterstrichen werden für bessere Lesbarkeit`;
 
-    let userPrompt = `Bitte optimieren Sie folgenden radiologischen Befund:\n\n${text}\n\n`;
+    let userPrompt = `Bitte optimieren Sie folgenden ${modalitaet || 'CT'}-Befund als Experte für ${modalitaet || 'CT'}:\n\n${text}\n\n`;
 
     // Add additional information if provided
     if (additionalInfo && additionalInfo.length > 0) {
@@ -637,7 +644,13 @@ STRUKTURIERUNG DES BEFUNDES:
       userPrompt += `WICHTIG: Nutzen Sie diese zusätzlichen Informationen nur, wenn sie für die Befundoptimierung relevant sind. Verknüpfen Sie relevante Aspekte miteinander, um ein vollständiges Bild zu erhalten. Ignorieren Sie irrelevante Informationen.\n\n`;
     }
 
-    userPrompt += `WICHTIG: Achten Sie besonders auf Bild-/Seriennummern im Befund. Diese MÜSSEN unbedingt beibehalten werden, da sie für die medizinische Dokumentation und Nachverfolgung essentiell sind.`;
+    userPrompt += `WICHTIG: Achten Sie besonders auf Bild-/Seriennummern im Befund. Diese MÜSSEN unbedingt beibehalten werden, da sie für die medizinische Dokumentation und Nachverfolgung essentiell sind.
+
+MODALITÄTSSPEZIFISCHE ANWEISUNGEN FÜR ${modalitaet || 'CT'}:
+- Verwenden Sie die korrekte Fachterminologie für ${modalitaet || 'CT'}
+- Berücksichtigen Sie modalitätsspezifische technische Parameter und Artefakte
+- Formulieren Sie den Befund entsprechend den Standards für ${modalitaet || 'CT'}-Befunde
+- Beachten Sie die spezifischen Indikationen und Limitationen von ${modalitaet || 'CT'}`;
     
     // Add mode-specific instructions
     switch (mode) {
