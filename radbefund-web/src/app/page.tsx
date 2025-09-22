@@ -338,6 +338,8 @@ export default function Home() {
   const [additionalInfo, setAdditionalInfo] = useState<AdditionalInfo[]>([]);
   const [showVorbefundModal, setShowVorbefundModal] = useState(false);
   const [showZusatzinfoModal, setShowZusatzinfoModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [confirmationStep, setConfirmationStep] = useState(1); // 1 = first confirmation, 2 = second confirmation
 
   // Modalität state
   const [selectedModalitaet, setSelectedModalitaet] = useState<string>('CT');
@@ -838,6 +840,24 @@ export default function Home() {
       return;
     }
 
+    // Show confirmation modal first
+    setShowConfirmationModal(true);
+    setConfirmationStep(1);
+  };
+
+  const handleConfirmation = () => {
+    if (confirmationStep === 1) {
+      // First confirmation - show second step
+      setConfirmationStep(2);
+    } else if (confirmationStep === 2) {
+      // Second confirmation - start processing
+      setShowConfirmationModal(false);
+      setConfirmationStep(1);
+      startProcessing();
+    }
+  };
+
+  const startProcessing = async () => {
     setLoading(true);
     setError('');
     setResult('');
@@ -1541,6 +1561,75 @@ export default function Home() {
           type="zusatzinfo"
           isDarkMode={isDarkMode}
         />
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4`}>
+            <div className="flex items-center mb-4">
+              <div className={`p-2 rounded-full ${isDarkMode ? 'bg-yellow-900/30' : 'bg-yellow-100'}`}>
+                <svg className={`w-6 h-6 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className={`text-lg font-semibold ml-3 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                {confirmationStep === 1 ? 'Datenschutz-Hinweis' : 'Generierung starten'}
+              </h3>
+            </div>
+            
+            {confirmationStep === 1 ? (
+              <div className="mb-6">
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-4`}>
+                  <strong className={`${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                    Wichtiger Hinweis zum Datenschutz:
+                  </strong>
+                </p>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-4`}>
+                  Bitte überprüfen Sie Ihren Befundtext vollständig auf personenbezogene Patientendaten (Namen, Geburtsdaten, Adressen, etc.) und entfernen Sie diese bei Bedarf, bevor Sie die Generierung starten.
+                </p>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Die Verarbeitung personenbezogener Daten ohne entsprechende Rechtsgrundlage kann gegen Datenschutzbestimmungen verstoßen.
+                </p>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-4`}>
+                  Sind Sie sicher, dass Sie die Befundgenerierung starten möchten?
+                </p>
+                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Der Befundtext wurde auf personenbezogene Daten überprüft und ist bereit für die Verarbeitung.
+                </p>
+              </div>
+            )}
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowConfirmationModal(false);
+                  setConfirmationStep(1);
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleConfirmation}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  confirmationStep === 1
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                {confirmationStep === 1 ? 'Bestätigen' : 'Generierung starten'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
