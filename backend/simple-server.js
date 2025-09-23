@@ -7,16 +7,34 @@ const { Pool } = require('pg');
 const OpenAI = require('openai');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-// Knowledge routes - RAG functionality enabled
-let knowledgeRoutes = null;
-try {
-  knowledgeRoutes = require('./src/routes/knowledge.js');
-  console.log('✅ Knowledge routes loaded - RAG functionality available');
-} catch (error) {
-  console.log('⚠️ Knowledge routes not available:', error.message);
-  knowledgeRoutes = null;
-}
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 require('dotenv').config();
+
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+// Authentication Middleware - MUSS vor Knowledge Routes definiert werden
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// Knowledge routes will be loaded after authenticateToken is defined
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -93,7 +111,7 @@ async function initializeDatabase() {
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3002',
+  origin: 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -101,9 +119,19 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Database connection already defined above
 
+// Load Knowledge Routes after authenticateToken is defined
+let knowledgeRoutes = null;
+try {
+  knowledgeRoutes = require('./src/routes/knowledge.js');
+  console.log('✅ Knowledge routes loaded - RAG functionality available');
+} catch (error) {
+  console.log('⚠️ Knowledge routes not available:', error.message);
+  knowledgeRoutes = null;
+}
+
 // Knowledge Base Routes (Admin only)
 if (knowledgeRoutes) {
-  app.use('/api/knowledge', knowledgeRoutes);
+  app.use('/api/knowledge', authenticateToken, knowledgeRoutes);
   console.log('✅ Knowledge Base routes activated');
 }
 
@@ -208,39 +236,14 @@ pool.query('SELECT 1', (err, result) => {
   }
 });
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here';
+// JWT Secret already defined above
 
 // OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Auth middleware
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  console.log('Auth check:', {
-    hasAuthHeader: !!authHeader,
-    hasToken: !!token,
-    tokenPrefix: token ? token.substring(0, 20) + '...' : 'none'
-  });
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      console.log('JWT verification failed:', err.message);
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-    console.log('JWT verification successful:', { userId: user.userId, type: user.type });
-    req.user = user;
-    next();
-  });
-}
+// Auth middleware already defined above
 
 // Admin middleware
 const requireAdmin = async (req, res, next) => {
@@ -1171,7 +1174,7 @@ async function startServer() {
     // Initialize database tables
     await initializeDatabase();
     
-    // Start server
+    // Start HTTP server (für einfacheren Zugriff ohne Zertifikat-Probleme)
     app.listen(PORT, () => {
       console.log(`🚀 RadBefund+ Backend läuft auf http://localhost:${PORT}`);
       console.log(`📊 Health Check: http://localhost:${PORT}/health`);

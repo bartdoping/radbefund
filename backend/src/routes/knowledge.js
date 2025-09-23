@@ -5,24 +5,8 @@ const fs = require('fs').promises;
 
 const router = express.Router();
 
-// Authentication Middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid or expired token' });
-  }
-};
+// Authentication Middleware - wird von simple-server.js bereitgestellt
+// Kein lokales Middleware nötig
 
 // Admin Middleware - nur Admin kann Wissensdatenbank verwalten
 const isAdmin = (req, res, next) => {
@@ -44,22 +28,19 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-// RAG Service - lazy initialization (persistent instance)
-let ragService = null;
+// RAG Service - direct initialization
 const getRAGService = async () => {
-  if (!ragService) {
-    try {
-      const RAGService = require('../services/ragService');
-      ragService = new RAGService();
-      await ragService.initialize();
-      console.log('✅ RAG Service initialized (persistent instance)');
-    } catch (error) {
-      console.error('❌ RAG Service initialization failed:', error.message);
-      ragService = null;
-      return null;
-    }
+  try {
+    console.log('🔄 Initializing RAG Service...');
+    const RAGService = require('../services/ragService');
+    const ragService = new RAGService();
+    await ragService.initialize();
+    console.log('✅ RAG Service initialized');
+    return ragService;
+  } catch (error) {
+    console.error('❌ RAG Service initialization failed:', error.message);
+    return null;
   }
-  return ragService;
 };
 
 // Multer Konfiguration für File Upload
@@ -253,7 +234,7 @@ router.get('/context', async (req, res) => {
 });
 
 // POST /api/knowledge/upload - Dokument hochladen (Admin only)
-router.post('/upload', authenticateToken, isAdmin, upload.single('file'), async (req, res) => {
+router.post('/upload', isAdmin, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -400,29 +381,29 @@ router.post('/text', async (req, res) => {
       tags: tags || [],
       priority,
       documentId: `text_${Date.now()}`,
-      uploadedBy: req.user.id,
+      uploadedBy: req.user.userId,
       type: 'text'
     };
     
-    const rag = getRAGService();
+    const rag = await getRAGService();
     if (!rag) {
       return res.status(503).json({ error: 'Knowledge base service not available' });
     }
     
-    const chunkCount = await rag.addDocument(content, metadata);
+    const result = await rag.addDocument(content, metadata);
     
     res.json({
       success: true,
       message: 'Text added to knowledge base successfully',
       document: {
-        id: metadata.documentId,
-        title,
-        description,
-        modality,
-        category,
-        tags,
-        priority,
-        chunkCount,
+        id: result.document.id,
+        title: result.document.title,
+        description: result.document.description,
+        modality: result.document.modality,
+        category: result.document.category,
+        tags: result.document.tags,
+        priority: result.document.priority,
+        chunkCount: result.chunkCount,
         type: 'text'
       }
     });
@@ -512,7 +493,7 @@ router.get('/modalities', async (req, res) => {
 
 // DELETE /api/knowledge/:documentId - Dokument löschen (Admin only) - DISABLED (duplicate route)
 /*
-router.delete('/:documentId', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:documentId', isAdmin, async (req, res) => {
   try {
     const { documentId } = req.params;
 
@@ -568,7 +549,7 @@ router.delete('/:documentId', authenticateToken, isAdmin, async (req, res) => {
 */
 
 // GET /api/knowledge/stats - Knowledge Base Statistiken (Admin only)
-router.get('/stats', authenticateToken, isAdmin, async (req, res) => {
+router.get('/stats', isAdmin, async (req, res) => {
   try {
     const rag = await getRAGService();
     

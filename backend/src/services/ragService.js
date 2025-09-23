@@ -37,6 +37,12 @@ class RAGService {
         ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
       });
 
+      // Initialize PostgreSQL tables for persistent storage
+      await this.createTables();
+      
+      // Load existing documents from PostgreSQL
+      await this.loadDocumentsFromDB();
+      
       // Initialize in-memory fallback
       if (!this.documents) {
         this.documents = [];
@@ -46,37 +52,110 @@ class RAGService {
       }
       this.isInitialized = true;
       
-      console.log('✅ RAG Service initialized successfully (PostgreSQL + In-Memory Mode)');
+      console.log('✅ RAG Service initialized successfully (PostgreSQL + In-Memory Fallback)');
       
-      // Load existing documents from database
-      await this.loadDocumentsFromDatabase();
     } catch (error) {
       console.error('❌ RAG Service initialization failed:', error);
       throw error;
     }
   }
 
-  async loadDocumentsFromDatabase() {
+  async createTables() {
     try {
-      if (!this.pool) return;
-      
+      // Create knowledge_documents table
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS knowledge_documents (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          file_path VARCHAR(500),
+          content_type VARCHAR(100),
+          file_size INTEGER,
+          modality VARCHAR(50),
+          category VARCHAR(100),
+          tags TEXT[],
+          priority VARCHAR(20) DEFAULT 'medium',
+          chunk_count INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create knowledge_chunks table
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS knowledge_chunks (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          document_id UUID REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+          content TEXT NOT NULL,
+          chunk_index INTEGER,
+          metadata JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      console.log('✅ Knowledge base tables created/verified');
+    } catch (error) {
+      console.error('❌ Error creating knowledge base tables:', error);
+      throw error;
+    }
+  }
+
+  async loadDocumentsFromDB() {
+    try {
       const result = await this.pool.query('SELECT * FROM knowledge_documents ORDER BY created_at DESC');
-      this.documentList = result.rows;
-      
-      // Load chunks from database
-      const chunksResult = await this.pool.query('SELECT * FROM knowledge_chunks ORDER BY document_id, chunk_index');
-      this.documents = chunksResult.rows.map(chunk => ({
-        content: chunk.content,
-        metadata: {
-          ...chunk.metadata,
-          chunkIndex: chunk.chunk_index,
-          documentId: chunk.document_id
-        }
+      this.documentList = result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        filePath: row.file_path,
+        contentType: row.content_type,
+        fileSize: row.file_size,
+        modality: row.modality,
+        category: row.category,
+        tags: row.tags || [],
+        priority: row.priority,
+        chunkCount: row.chunk_count,
+        createdAt: row.created_at
       }));
       
-      console.log(`📚 Loaded ${this.documentList.length} documents and ${this.documents.length} chunks from database`);
+      console.log(`✅ Loaded ${this.documentList.length} documents from PostgreSQL`);
     } catch (error) {
-      console.error('Error loading documents from database:', error);
+      console.warn('⚠️ Could not load documents from PostgreSQL, using in-memory fallback:', error.message);
+      this.documentList = [];
+    }
+  }
+
+  async saveDocumentToDB(document) {
+    try {
+      if (!this.pool) {
+        console.warn('⚠️ No database connection, document not saved to PostgreSQL');
+        return null;
+      }
+
+      const result = await this.pool.query(`
+        INSERT INTO knowledge_documents (
+          title, description, file_path, content_type, file_size, 
+          modality, category, tags, priority, chunk_count
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `, [
+        document.title,
+        document.description,
+        document.filePath || null,
+        document.contentType || null,
+        document.fileSize || null,
+        document.modality || null,
+        document.category || null,
+        document.tags || [],
+        document.priority || 'medium',
+        document.chunkCount || 0
+      ]);
+
+      console.log(`✅ Document "${document.title}" saved to PostgreSQL`);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error saving document to PostgreSQL:', error);
+      return null;
     }
   }
 
@@ -188,8 +267,25 @@ class RAGService {
         await this.initialize();
       }
       
+      console.log('📝 Adding document:', metadata.title);
+      
       // Text in Chunks aufteilen
-      const chunks = await this.chunkText(content, metadata);
+      let chunks = [];
+      try {
+        chunks = await this.chunkText(content, metadata);
+        console.log(`📄 Created ${chunks.length} chunks`);
+      } catch (chunkError) {
+        console.warn('⚠️ Chunking failed, using simple chunk:', chunkError.message);
+        // Fallback: Einfacher Chunk
+        chunks = [{
+          content: content,
+          metadata: {
+            ...metadata,
+            chunkIndex: 0,
+            chunkSize: content.length
+          }
+        }];
+      }
       
       // Erstelle Dokumenten-Eintrag
       const documentEntry = {
@@ -211,23 +307,24 @@ class RAGService {
       if (this.pool) {
         try {
           const docResult = await this.pool.query(
-            `INSERT INTO knowledge_documents (id, title, description, content, modality, category, tags, priority, file_size, file_type, type, chunk_count)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+            `INSERT INTO knowledge_documents (title, description, file_path, content_type, file_size, modality, category, tags, priority, chunk_count)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
             [
-              documentEntry.id,
               documentEntry.title,
               documentEntry.description,
-              content,
+              null, // file_path (nicht für Text-Dokumente)
+              'text/plain', // content_type
+              documentEntry.fileSize,
               documentEntry.modality,
               documentEntry.category,
               documentEntry.tags,
               documentEntry.priority,
-              documentEntry.fileSize,
-              documentEntry.fileType,
-              documentEntry.type,
               documentEntry.chunkCount
             ]
           );
+          
+          const savedDoc = docResult.rows[0];
+          documentEntry.id = savedDoc.id; // Verwende die generierte UUID
           
           // Save chunks to database
           for (let i = 0; i < chunks.length; i++) {
@@ -272,7 +369,7 @@ class RAGService {
       }
       
       console.log(`✅ Added ${chunks.length} chunks to knowledge base (PostgreSQL + In-Memory Mode)`);
-      return chunks.length;
+      return { document: documentEntry, chunkCount: chunks.length };
     } catch (error) {
       console.error('Error adding document to knowledge base:', error);
       throw error;
@@ -419,11 +516,40 @@ class RAGService {
         await this.initialize();
       }
       
+      let totalChunks = 0;
+      let totalDocuments = 0;
+      let mode = 'In-Memory';
+      let collectionName = 'radbefund_knowledge_in_memory';
+      
+      // Hole Statistiken aus PostgreSQL falls verfügbar
+      if (this.pool) {
+        try {
+          const docResult = await this.pool.query('SELECT COUNT(*) as count FROM knowledge_documents');
+          const chunkResult = await this.pool.query('SELECT COUNT(*) as count FROM knowledge_chunks');
+          
+          totalDocuments = parseInt(docResult.rows[0].count);
+          totalChunks = parseInt(chunkResult.rows[0].count);
+          mode = 'PostgreSQL';
+          collectionName = 'radbefund_knowledge_postgresql';
+          
+          console.log(`📊 PostgreSQL Stats: ${totalDocuments} documents, ${totalChunks} chunks`);
+        } catch (dbError) {
+          console.warn('⚠️ Could not get stats from PostgreSQL:', dbError.message);
+          // Fallback zu In-Memory Stats
+          totalChunks = this.documents.length;
+          totalDocuments = this.documentList.length;
+        }
+      } else {
+        // Fallback zu In-Memory Stats
+        totalChunks = this.documents.length;
+        totalDocuments = this.documentList.length;
+      }
+      
       return {
-        totalChunks: this.documents.length,
-        totalDocuments: this.documentList.length,
-        collectionName: 'radbefund_knowledge_in_memory',
-        mode: 'In-Memory'
+        totalChunks,
+        totalDocuments,
+        collectionName,
+        mode
       };
     } catch (error) {
       console.error('Error getting collection stats:', error);
@@ -437,7 +563,32 @@ class RAGService {
         await this.initialize();
       }
       
-      return this.documentList;
+      // Lade Dokumente aus PostgreSQL falls verfügbar
+      if (this.pool) {
+        try {
+          const result = await this.pool.query('SELECT * FROM knowledge_documents ORDER BY created_at DESC');
+          this.documentList = result.rows.map(row => ({
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            filePath: row.file_path,
+            contentType: row.content_type,
+            fileSize: row.file_size,
+            modality: row.modality,
+            category: row.category,
+            tags: row.tags || [],
+            priority: row.priority,
+            chunkCount: row.chunk_count,
+            createdAt: row.created_at
+          }));
+          
+          console.log(`✅ Loaded ${this.documentList.length} documents from PostgreSQL`);
+        } catch (dbError) {
+          console.warn('⚠️ Could not load documents from PostgreSQL:', dbError.message);
+        }
+      }
+      
+      return this.documentList || [];
     } catch (error) {
       console.error('Error getting document list:', error);
       throw error;
