@@ -7,9 +7,15 @@ const { Pool } = require('pg');
 const OpenAI = require('openai');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-// Knowledge routes - completely disabled
+// Knowledge routes - RAG functionality enabled
 let knowledgeRoutes = null;
-console.log('Knowledge routes disabled - RAG functionality not available');
+try {
+  knowledgeRoutes = require('./src/routes/knowledge.js');
+  console.log('✅ Knowledge routes loaded - RAG functionality available');
+} catch (error) {
+  console.log('⚠️ Knowledge routes not available:', error.message);
+  knowledgeRoutes = null;
+}
 require('dotenv').config();
 
 const app = express();
@@ -25,6 +31,66 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Initialize database tables for persistent storage
+async function initializeDatabase() {
+  try {
+    // Create befund_history table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS befund_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        title TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        optimized_text TEXT NOT NULL,
+        options JSONB NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        is_favorite BOOLEAN DEFAULT FALSE,
+        tags TEXT[] DEFAULT '{}',
+        modality TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create knowledge_documents table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_documents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        modality TEXT,
+        category TEXT,
+        tags TEXT[] DEFAULT '{}',
+        priority TEXT DEFAULT 'medium',
+        file_size INTEGER,
+        file_type TEXT,
+        type TEXT NOT NULL DEFAULT 'text',
+        chunk_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+
+    // Create knowledge_chunks table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        document_id UUID NOT NULL,
+        content TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        embedding VECTOR(3072), -- For future vector search
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('✅ Database tables initialized for persistent storage');
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+  }
+}
+
 // Middleware
 app.use(cors({
   origin: 'http://localhost:3002',
@@ -34,6 +100,12 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Database connection already defined above
+
+// Knowledge Base Routes (Admin only)
+if (knowledgeRoutes) {
+  app.use('/api/knowledge', knowledgeRoutes);
+  console.log('✅ Knowledge Base routes activated');
+}
 
 // Email configuration
 const emailTransporter = nodemailer.createTransport({
@@ -149,14 +221,22 @@ function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
+  console.log('Auth check:', {
+    hasAuthHeader: !!authHeader,
+    hasToken: !!token,
+    tokenPrefix: token ? token.substring(0, 20) + '...' : 'none'
+  });
+
   if (!token) {
     return res.status(401).json({ error: 'Access token required' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
+      console.log('JWT verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
+    console.log('JWT verification successful:', { userId: user.userId, type: user.type });
     req.user = user;
     next();
   });
@@ -217,16 +297,30 @@ app.post('/auth/register', async (req, res) => {
       [email.toLowerCase(), verificationCode, expiresAt]
     );
     
-    // Send verification email
-    const emailSent = await sendVerificationEmail(email, verificationCode);
-    if (!emailSent) {
-      return res.status(500).json({ error: "Fehler beim Senden der Verifizierungs-Email" });
-    }
+    // TEMPORARY: Skip email verification for testing
+    // Create user directly in database
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userResult = await pool.query(
+      'INSERT INTO users (email, password_hash, name, organization, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [email.toLowerCase(), hashedPassword, name, organization || '', true]
+    );
+    const user = userResult.rows[0];
     
-    res.status(200).json({
-      message: "Verifizierungs-Email wurde gesendet",
-      email: email.toLowerCase(),
-      requiresVerification: true
+    // Generate tokens immediately
+    const accessToken = jwt.sign({ userId: user.id, email: user.email, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, email: user.email, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    
+    res.status(201).json({
+      message: "Benutzer erfolgreich registriert (Test-Modus)",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organization: user.organization,
+        createdAt: user.created_at
+      },
+      accessToken,
+      refreshToken
     });
   } catch (err) {
     console.error('Registration error:', err);
@@ -267,8 +361,8 @@ app.post('/auth/verify-email', async (req, res) => {
     const user = result.rows[0];
     
     // Generate tokens
-    const accessToken = jwt.sign({ userId: user.id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ userId: user.id, email: user.email, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, email: user.email, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
     
     // Store refresh token
     const expiresAt = new Date();
@@ -404,8 +498,8 @@ app.post('/auth/login', async (req, res) => {
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
     
     // Generate tokens
-    const accessToken = jwt.sign({ userId: user.id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ userId: user.id, email: user.email, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, email: user.email, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
     
     // Store refresh token
     const expiresAt = new Date();
@@ -459,8 +553,8 @@ app.post('/auth/refresh', async (req, res) => {
     }
     
     // Generate new tokens
-    const accessToken = jwt.sign({ userId: tokenData.user_id, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
-    const newRefreshToken = jwt.sign({ userId: tokenData.user_id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ userId: tokenData.user_id, email: user.email, type: 'access' }, JWT_SECRET, { expiresIn: '15m' });
+    const newRefreshToken = jwt.sign({ userId: tokenData.user_id, email: user.email, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
     
     // Revoke old refresh token
     await pool.query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = $1', [refreshToken]);
@@ -639,10 +733,11 @@ app.post('/structured', authenticateToken, async (req, res) => {
       try {
         const ragService = require('./src/services/ragService');
         const rag = new ragService();
+        await rag.initialize();
         
         // Search for relevant knowledge based on modality and text content
         const searchQuery = `${text} ${modalitaet || 'CT'}`;
-        const contextResults = await rag.search(searchQuery, { modality: modalitaet }, 3);
+        const contextResults = await rag.getRelevantContext(searchQuery, modalitaet, [], 5);
         
         if (contextResults && contextResults.length > 0) {
           knowledgeContext = '\n\nRELEVANTE WISSENSBASIERTE INFORMATIONEN:\n';
@@ -954,41 +1049,145 @@ Ergebnis: "Leber: Unauffällig.\nHerz, Gefäße: Normale Herzgröße, keine Gef�
   }
 });
 
-// GET /api/befund-history - Get user's befund history
+// GET /api/befund-history - Get user's befund history (PERSISTENT STORAGE)
 app.get('/api/befund-history', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    // For now, return empty history until database is properly configured
-    res.json({ success: true, history: [] });
+    const result = await pool.query(
+      'SELECT * FROM befund_history WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    
+    res.json({
+      success: true,
+      history: result.rows
+    });
   } catch (error) {
     console.error('Error fetching befund history:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/befund-history/:id - Delete specific befund from history
+// POST /api/befund-history - Save befund to history (PERSISTENT STORAGE)
+app.post('/api/befund-history', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { title, originalText, optimizedText, options, tags, modality } = req.body;
+    
+    console.log('Saving befund to database:', {
+      userId,
+      title: title?.substring(0, 50),
+      originalTextLength: originalText?.length,
+      optimizedTextLength: optimizedText?.length,
+      optionsKeys: Object.keys(options || {}),
+      tags,
+      modality
+    });
+    
+    // Ensure tags is an array
+    const tagsArray = Array.isArray(tags) ? tags : [];
+    
+    const result = await pool.query(
+      `INSERT INTO befund_history (user_id, original_text, processed_text, options, modalitaet, additional_info)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [userId, originalText, JSON.stringify({ optimizedText, title }), JSON.stringify(options), modality, JSON.stringify({ tags: tagsArray })]
+    );
+    
+    console.log('✅ Befund saved to database:', result.rows[0].id);
+    
+    res.json({
+      success: true,
+      befund: result.rows[0]
+    });
+  } catch (error) {
+    console.error('❌ Error saving befund:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail
+    });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
+  }
+});
+
+// PUT /api/befund-history/:id/favorite - Toggle favorite status (PERSISTENT STORAGE)
+app.put('/api/befund-history/:id/favorite', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const { isFavorite } = req.body;
+    
+    const result = await pool.query(
+      'UPDATE befund_history SET is_favorite = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [isFavorite, id, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Befund nicht gefunden' });
+    }
+    
+    res.json({
+      success: true,
+      befund: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating favorite:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/befund-history/:id - Delete specific befund from history (PERSISTENT STORAGE)
 app.delete('/api/befund-history/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const befundId = req.params.id;
     
-    // For now, just return success until database is properly configured
-    res.json({ success: true, message: 'Befund gelöscht' });
+    const result = await pool.query(
+      'DELETE FROM befund_history WHERE id = $1 AND user_id = $2 RETURNING *',
+      [befundId, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Befund nicht gefunden' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Befund erfolgreich gelöscht'
+    });
   } catch (error) {
     console.error('Error deleting befund:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 RadBefund+ Backend läuft auf http://localhost:${PORT}`);
-  console.log(`📊 Health Check: http://localhost:${PORT}/health`);
-  console.log(`🔐 Auth Endpoints: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/profile`);
-  console.log(`🤖 AI Endpoints: /structured`);
-  console.log(`📚 Knowledge Base Endpoints: /api/knowledge/*`);
-});
+// Start server with database initialization
+async function startServer() {
+  try {
+    // Initialize database tables
+    await initializeDatabase();
+    
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`🚀 RadBefund+ Backend läuft auf http://localhost:${PORT}`);
+      console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+      console.log(`🔐 Auth Endpoints: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/profile`);
+      console.log(`🤖 AI Endpoints: /structured`);
+      console.log(`📚 Knowledge Base Endpoints: /api/knowledge/*`);
+      console.log(`📋 Befund History: /api/befund-history/*`);
+      console.log(`💾 PERSISTENT STORAGE: PostgreSQL Database Active`);
+    });
+  } catch (error) {
+    console.error('❌ Server startup failed:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Knowledge Base Routes - completely disabled
 console.log('⚠️ Knowledge Base routes disabled - RAG functionality not available');

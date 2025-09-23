@@ -26,23 +26,57 @@ class RAGService {
 
   async initialize() {
     try {
-      // Erstelle oder lade Collection
-      const collections = await this.chromaClient.listCollections();
-      const collectionName = 'radbefund_knowledge';
-      
-      if (collections.find(c => c.name === collectionName)) {
-        this.collection = await this.chromaClient.getCollection(collectionName);
-      } else {
-        this.collection = await this.chromaClient.createCollection({
-          name: collectionName,
-          metadata: { description: 'RadBefund+ Knowledge Base' }
-        });
+      // PostgreSQL Database connection for persistent storage
+      const { Pool } = require('pg');
+      this.pool = new Pool({
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'radbefund_db',
+        user: process.env.DB_USER || 'radbefund_user',
+        password: process.env.DB_PASSWORD || 'radbefund_password',
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      });
+
+      // Initialize in-memory fallback
+      if (!this.documents) {
+        this.documents = [];
       }
+      if (!this.documentList) {
+        this.documentList = [];
+      }
+      this.isInitialized = true;
       
-      console.log('✅ RAG Service initialized successfully');
+      console.log('✅ RAG Service initialized successfully (PostgreSQL + In-Memory Mode)');
+      
+      // Load existing documents from database
+      await this.loadDocumentsFromDatabase();
     } catch (error) {
       console.error('❌ RAG Service initialization failed:', error);
       throw error;
+    }
+  }
+
+  async loadDocumentsFromDatabase() {
+    try {
+      if (!this.pool) return;
+      
+      const result = await this.pool.query('SELECT * FROM knowledge_documents ORDER BY created_at DESC');
+      this.documentList = result.rows;
+      
+      // Load chunks from database
+      const chunksResult = await this.pool.query('SELECT * FROM knowledge_chunks ORDER BY document_id, chunk_index');
+      this.documents = chunksResult.rows.map(chunk => ({
+        content: chunk.content,
+        metadata: {
+          ...chunk.metadata,
+          chunkIndex: chunk.chunk_index,
+          documentId: chunk.document_id
+        }
+      }));
+      
+      console.log(`📚 Loaded ${this.documentList.length} documents and ${this.documents.length} chunks from database`);
+    } catch (error) {
+      console.error('Error loading documents from database:', error);
     }
   }
 
@@ -150,34 +184,94 @@ class RAGService {
 
   async addDocument(content, metadata = {}) {
     try {
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
       // Text in Chunks aufteilen
       const chunks = await this.chunkText(content, metadata);
       
-      // Embeddings für jeden Chunk generieren
-      const embeddings = [];
-      const documents = [];
-      const metadatas = [];
-      const ids = [];
+      // Erstelle Dokumenten-Eintrag
+      const documentEntry = {
+        id: metadata.documentId || `doc_${Date.now()}`,
+        title: metadata.title || 'Unbenanntes Dokument',
+        description: metadata.description || '',
+        modality: metadata.modality || '',
+        category: metadata.category || '',
+        tags: metadata.tags || [],
+        priority: metadata.priority || 'medium',
+        chunkCount: chunks.length,
+        fileSize: metadata.fileSize || content.length,
+        fileType: metadata.fileType || 'text',
+        type: metadata.type || 'text',
+        uploadedAt: new Date().toISOString()
+      };
       
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const embedding = await this.generateEmbedding(chunk.content);
-        
-        embeddings.push(embedding);
-        documents.push(chunk.content);
-        metadatas.push(chunk.metadata);
-        ids.push(`${metadata.documentId || 'doc'}_chunk_${i}`);
+      // Save to PostgreSQL database
+      if (this.pool) {
+        try {
+          const docResult = await this.pool.query(
+            `INSERT INTO knowledge_documents (id, title, description, content, modality, category, tags, priority, file_size, file_type, type, chunk_count)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+            [
+              documentEntry.id,
+              documentEntry.title,
+              documentEntry.description,
+              content,
+              documentEntry.modality,
+              documentEntry.category,
+              documentEntry.tags,
+              documentEntry.priority,
+              documentEntry.fileSize,
+              documentEntry.fileType,
+              documentEntry.type,
+              documentEntry.chunkCount
+            ]
+          );
+          
+          // Save chunks to database
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            await this.pool.query(
+              `INSERT INTO knowledge_chunks (document_id, content, chunk_index, metadata)
+               VALUES ($1, $2, $3, $4)`,
+              [
+                documentEntry.id,
+                chunk.content,
+                i,
+                JSON.stringify({
+                  ...chunk.metadata,
+                  chunkIndex: i,
+                  documentId: documentEntry.id
+                })
+              ]
+            );
+          }
+          
+          console.log(`✅ Document "${documentEntry.title}" saved to PostgreSQL database`);
+        } catch (dbError) {
+          console.error('Database save error:', dbError);
+          // Fallback to in-memory storage
+        }
       }
       
-      // Zu ChromaDB hinzufügen
-      await this.collection.add({
-        ids: ids,
-        embeddings: embeddings,
-        documents: documents,
-        metadatas: metadatas
-      });
+      // Füge zur In-Memory Liste hinzu (für Fallback)
+      this.documentList.push(documentEntry);
       
-      console.log(`✅ Added ${chunks.length} chunks to knowledge base`);
+      // Zu In-Memory Knowledge Base hinzufügen
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        this.documents.push({
+          content: chunk.content,
+          metadata: {
+            ...chunk.metadata,
+            chunkIndex: i,
+            documentId: documentEntry.id
+          }
+        });
+      }
+      
+      console.log(`✅ Added ${chunks.length} chunks to knowledge base (PostgreSQL + In-Memory Mode)`);
       return chunks.length;
     } catch (error) {
       console.error('Error adding document to knowledge base:', error);
@@ -187,25 +281,60 @@ class RAGService {
 
   async search(query, filters = {}, limit = 5) {
     try {
-      // Query-Embedding generieren
-      const queryEmbedding = await this.generateEmbedding(query);
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
       
-      // Suche in ChromaDB
-      const results = await this.collection.query({
-        queryEmbeddings: [queryEmbedding],
-        nResults: limit,
-        where: filters
-      });
+      // Einfache Textsuche in In-Memory Knowledge Base
+      const queryLower = query.toLowerCase();
+      const results = [];
       
-      // Ergebnisse formatieren
-      const formattedResults = results.documents[0].map((doc, index) => ({
-        content: doc,
-        metadata: results.metadatas[0][index],
-        distance: results.distances[0][index],
-        relevance: 1 - results.distances[0][index] // Konvertiere Distanz zu Relevanz
-      }));
+      for (const doc of this.documents) {
+        let relevance = 0;
+        
+        // Einfache Relevanz-Berechnung basierend auf Text-Übereinstimmung
+        if (doc.content.toLowerCase().includes(queryLower)) {
+          relevance += 0.8;
+        }
+        
+        if (doc.metadata.title && doc.metadata.title.toLowerCase().includes(queryLower)) {
+          relevance += 0.9;
+        }
+        
+        if (doc.metadata.description && doc.metadata.description.toLowerCase().includes(queryLower)) {
+          relevance += 0.7;
+        }
+        
+        // Filter anwenden
+        let matchesFilter = true;
+        if (filters.modality && doc.metadata.modality !== filters.modality) {
+          matchesFilter = false;
+        }
+        if (filters.category && doc.metadata.category !== filters.category) {
+          matchesFilter = false;
+        }
+        if (filters.tags && filters.tags.$in) {
+          const hasMatchingTag = filters.tags.$in.some(tag => 
+            doc.metadata.tags && doc.metadata.tags.includes(tag)
+          );
+          if (!hasMatchingTag) {
+            matchesFilter = false;
+          }
+        }
+        
+        if (relevance > 0 && matchesFilter) {
+          results.push({
+            content: doc.content,
+            metadata: doc.metadata,
+            relevance: relevance
+          });
+        }
+      }
       
-      return formattedResults;
+      // Nach Relevanz sortieren und limitieren
+      return results
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, limit);
     } catch (error) {
       console.error('Error searching knowledge base:', error);
       throw error;
@@ -286,13 +415,71 @@ class RAGService {
 
   async getCollectionStats() {
     try {
-      const count = await this.collection.count();
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
       return {
-        totalChunks: count,
-        collectionName: this.collection.name
+        totalChunks: this.documents.length,
+        totalDocuments: this.documentList.length,
+        collectionName: 'radbefund_knowledge_in_memory',
+        mode: 'In-Memory'
       };
     } catch (error) {
       console.error('Error getting collection stats:', error);
+      throw error;
+    }
+  }
+
+  async getDocumentList() {
+    try {
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
+      return this.documentList;
+    } catch (error) {
+      console.error('Error getting document list:', error);
+      throw error;
+    }
+  }
+
+  async deleteDocument(documentId) {
+    try {
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
+      // Delete from PostgreSQL database
+      if (this.pool) {
+        try {
+          // Delete chunks first (foreign key constraint)
+          await this.pool.query('DELETE FROM knowledge_chunks WHERE document_id = $1', [documentId]);
+          
+          // Delete document
+          const result = await this.pool.query('DELETE FROM knowledge_documents WHERE id = $1 RETURNING *', [documentId]);
+          
+          if (result.rows.length === 0) {
+            console.log(`⚠️ Document ${documentId} not found in database`);
+          } else {
+            console.log(`✅ Document ${documentId} deleted from PostgreSQL database`);
+          }
+        } catch (dbError) {
+          console.error('Database delete error:', dbError);
+          // Fallback to in-memory deletion
+        }
+      }
+      
+      // Entferne aus In-Memory Dokumentenliste
+      this.documentList = this.documentList.filter(doc => doc.id !== documentId);
+      
+      // Entferne alle Chunks dieses Dokuments aus In-Memory
+      this.documents = this.documents.filter(doc => doc.metadata.documentId !== documentId);
+      
+      console.log(`✅ Document ${documentId} deleted from knowledge base (PostgreSQL + In-Memory Mode)`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting document:', error);
       throw error;
     }
   }

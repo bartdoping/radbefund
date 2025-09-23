@@ -425,32 +425,90 @@ export default function Home() {
     localStorage.setItem('darkMode', isDarkMode.toString());
   }, [isDarkMode]);
 
-  // Save befund history to localStorage
-  useEffect(() => {
-    localStorage.setItem('befundHistory', JSON.stringify(befundHistory));
-  }, [befundHistory]);
+  // Befund history is now stored in PostgreSQL database - no localStorage needed
 
-  // Load befund history from localStorage (temporary fallback)
+  // Load befund history from PostgreSQL database (PERSISTENT STORAGE)
   const loadBefundHistory = async () => {
     if (!accessToken) {
       console.log('No access token, skipping befund history load');
       return;
     }
     
-    console.log('Loading befund history from localStorage...');
+    console.log('Loading befund history from PostgreSQL database...');
     
     try {
-      const savedBefundHistory = localStorage.getItem('befundHistory');
-      if (savedBefundHistory) {
-        const history = JSON.parse(savedBefundHistory);
-        setBefundHistory(history);
-        console.log('Loaded befund history from localStorage:', history.length, 'items');
+      const response = await apiCall('http://localhost:3001/api/befund-history', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Convert database format to frontend format
+        const convertedHistory = (result.history || []).map((dbBefund: any) => {
+          // Safe JSON parsing with fallback
+          let processedData = {};
+          let additionalData = {};
+          
+          try {
+            if (typeof dbBefund.processed_text === 'string') {
+              // Try to parse as JSON, fallback to plain text
+              try {
+                processedData = JSON.parse(dbBefund.processed_text);
+              } catch (e) {
+                // If not JSON, treat as plain text (legacy data)
+                processedData = {
+                  title: dbBefund.processed_text.substring(0, 50) + (dbBefund.processed_text.length > 50 ? '...' : ''),
+                  optimizedText: dbBefund.processed_text
+                };
+              }
+            } else {
+              processedData = dbBefund.processed_text || {};
+            }
+          } catch (e) {
+            console.warn('Error parsing processed_text:', e);
+            processedData = {
+              title: 'Unbenannter Befund',
+              optimizedText: dbBefund.processed_text || ''
+            };
+          }
+          
+          try {
+            if (typeof dbBefund.additional_info === 'string') {
+              additionalData = JSON.parse(dbBefund.additional_info);
+            } else {
+              additionalData = dbBefund.additional_info || {};
+            }
+          } catch (e) {
+            console.warn('Error parsing additional_info:', e);
+            additionalData = {};
+          }
+          
+          return {
+            id: dbBefund.id.toString(),
+            title: processedData?.title || 'Unbenannter Befund',
+            originalText: dbBefund.original_text,
+            result: processedData?.optimizedText || dbBefund.processed_text || '',
+            workflowOptions: dbBefund.options?.workflowOptions || {},
+            selectedLayout: dbBefund.options?.selectedLayout || '',
+            selectedModalitaet: dbBefund.modalitaet || dbBefund.options?.selectedModalitaet || '',
+            additionalInfo: dbBefund.options?.additionalInfo || [],
+            isFavorite: false, // Not stored in current DB structure
+            createdAt: dbBefund.created_at
+          };
+        });
+        
+        setBefundHistory(convertedHistory);
+        console.log('Loaded befund history from database:', convertedHistory.length, 'items');
       } else {
+        console.error('Failed to load befund history, status:', response.status);
         setBefundHistory([]);
-        console.log('No befund history found in localStorage');
       }
     } catch (error) {
-      console.error('Error loading befund history from localStorage:', error);
+      console.error('Error loading befund history from database:', error);
       setBefundHistory([]);
     }
   };
@@ -601,6 +659,14 @@ export default function Home() {
       sessionStorage.setItem('accessToken', data.accessToken);
       console.log('Login credentials saved to sessionStorage only');
     }
+
+    // Nach erfolgreichem Login zur Startseite navigieren
+    console.log('Login erfolgreich - Nutzer wird zur Startseite geleitet');
+    
+    // Kurze Verzögerung, dann zur Startseite navigieren
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 500);
   };
 
   const handleRegister = async (email: string, password: string, name: string, organization?: string) => {
@@ -630,6 +696,14 @@ export default function Home() {
     setAccessToken(data.accessToken);
     localStorage.setItem('user', JSON.stringify(data.user));
     localStorage.setItem('accessToken', data.accessToken);
+    
+    // Nach erfolgreicher Registrierung zur Startseite navigieren
+    console.log('Registrierung erfolgreich - Nutzer wird zur Startseite geleitet');
+    
+    // Kurze Verzögerung, dann zur Startseite navigieren
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 500);
   };
 
   const handleVerifyEmail = async (email: string, code: string, password: string, name: string, organization?: string) => {
@@ -650,6 +724,14 @@ export default function Home() {
     setRefreshToken(data.refreshToken);
     setIsAuthenticated(true);
     setShowAuthModal(false);
+    
+    // Nach erfolgreicher E-Mail-Verifizierung zur Startseite navigieren
+    console.log('E-Mail-Verifizierung erfolgreich - Nutzer wird zur Startseite geleitet');
+    
+    // Kurze Verzögerung, dann zur Startseite navigieren
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 500);
   };
 
   const handleForgotPassword = async (email: string) => {
@@ -696,26 +778,68 @@ export default function Home() {
   };
 
   // Befund history functions - using localStorage for now
-  const saveBefundToHistory = (originalText: string, result: string) => {
+  const saveBefundToHistory = async (originalText: string, result: string) => {
+    if (!accessToken) {
+      console.log('No access token, cannot save befund to database');
+      return;
+    }
+
     const title = originalText.length > 50 
       ? originalText.substring(0, 50) + '...' 
       : originalText;
     
-    const newBefund: BefundHistory = {
-      id: Date.now().toString(),
-      title,
-      originalText,
-      result,
-      workflowOptions: { ...workflowOptions },
-      selectedLayout,
-      selectedModalitaet,
-      additionalInfo: [...additionalInfo],
-      isFavorite: false,
-      createdAt: new Date().toISOString(),
-    };
+    console.log('Saving befund to history:', {
+      hasAccessToken: !!accessToken,
+      title: title.substring(0, 30),
+      originalTextLength: originalText.length,
+      resultLength: result.length,
+      userEmail: user?.email
+    });
     
-    setBefundHistory(prev => [newBefund, ...prev]);
-    setSelectedBefund(newBefund.id);
+    try {
+      const response = await apiCall('http://localhost:3001/api/befund-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          originalText,
+          optimizedText: result,
+          options: {
+            workflowOptions: { ...workflowOptions },
+            selectedLayout,
+            selectedModalitaet,
+            additionalInfo: [...additionalInfo]
+          },
+          tags: [],
+          modality: selectedModalitaet || 'CT'
+        }),
+      });
+
+      console.log('Save befund response:', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
+
+      if (response.ok) {
+        const savedBefund = await response.json();
+        console.log('✅ Befund saved to PostgreSQL database:', savedBefund.befund?.id);
+        
+        // Refresh history from database
+        await loadBefundHistory();
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to save befund to database:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+      }
+    } catch (error) {
+      console.error('Error saving befund to database:', error);
+    }
   };
 
   const refreshBefundHistory = () => {
@@ -788,16 +912,40 @@ export default function Home() {
     setAdditionalInfo(prev => prev.filter(info => info.id !== id));
   };
 
-  const deleteBefundFromHistory = (befundId: string) => {
+  const deleteBefundFromHistory = async (befundId: string) => {
+    if (!accessToken) {
+      console.log('No access token, cannot delete befund from database');
+      return;
+    }
+
     const befund = befundHistory.find(b => b.id === befundId);
     const befundTitle = befund ? befund.title : 'diesen Befund';
     
     if (window.confirm(`Sind Sie sicher, dass Sie "${befundTitle}" aus der Historie löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) {
-      setBefundHistory(prev => prev.filter(b => b.id !== befundId));
-      if (selectedBefund === befundId) {
-        setSelectedBefund(null);
-        setText('');
-        setResult('');
+      try {
+        const response = await apiCall(`http://localhost:3001/api/befund-history/${befundId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          console.log('✅ Befund deleted from PostgreSQL database');
+          
+          // Refresh history from database
+          await loadBefundHistory();
+          
+          if (selectedBefund === befundId) {
+            setSelectedBefund(null);
+            setText('');
+            setResult('');
+          }
+        } else {
+          console.error('Failed to delete befund from database, status:', response.status);
+        }
+      } catch (error) {
+        console.error('Error deleting befund from database:', error);
       }
     }
   };
@@ -1073,14 +1221,20 @@ export default function Home() {
       <div className={`w-64 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-r flex flex-col`}>
         {/* Logo */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => {
+              // Zur Startseite navigieren - Seite neu laden um alle Zustände zurückzusetzen
+              window.location.href = '/';
+            }}
+            className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer w-full text-left"
+          >
             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">R+</span>
             </div>
             <div>
               <h1 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>RadBefund+</h1>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Navigation */}
