@@ -50,6 +50,9 @@ const server = http.createServer((req, res) => {
   const path = parsedUrl.pathname;
   const method = req.method;
   const origin = req.headers.origin;
+  
+  // Debug logging
+  console.log(`[${new Date().toISOString()}] ${method} ${path} from ${origin || 'unknown'}`);
 
   // Check if origin is allowed
   const isAllowedOrigin = allowedOrigins.includes(origin);
@@ -321,6 +324,19 @@ const server = http.createServer((req, res) => {
       success: true,
       data: [],
       total: 0
+    }));
+    return;
+  }
+
+  // Fallback endpoint for any other requests
+  if (path.startsWith('/api/') || path.startsWith('/auth/') || path.startsWith('/layouts')) {
+    // Return empty arrays for any API requests that might be missing
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      data: [],
+      total: 0,
+      message: 'Fallback response for ' + path
     }));
     return;
   }
