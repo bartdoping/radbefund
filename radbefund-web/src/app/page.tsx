@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AuthModal from './components/AuthModal';
 import LayoutSelector from './components/LayoutSelector';
 import KnowledgeBaseAdmin from './components/KnowledgeBaseAdmin';
-import { API_URL } from '../lib/api';
+// import { API_URL } from '../lib/api'; // Unused import
 import { apiClient } from '../lib/api-client';
 
 // Additional Info Modal Component
@@ -441,7 +441,7 @@ export default function Home() {
         const result = await response.json();
         
         // Convert database format to frontend format
-        const convertedHistory = (result.history || []).map((dbBefund: any) => {
+        const convertedHistory = (result.history || []).map((dbBefund: Record<string, unknown>) => {
           // Safe JSON parsing with fallback
           let processedData = {};
           let additionalData = {};

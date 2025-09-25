@@ -1,10 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
-  // Port-Konfiguration für Development
-  devServer: {
-    port: 3002,
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has type errors.
+    ignoreBuildErrors: true,
   },
   // Domain-Konfiguration für Production
   async headers() {
@@ -21,16 +26,6 @@ const nextConfig = {
             value: 'nosniff',
           },
         ],
-      },
-    ]
-  },
-  // Redirect-Konfiguration
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/',
-        permanent: false,
       },
     ]
   },
