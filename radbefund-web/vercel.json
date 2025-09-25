@@ -1,10 +1,4 @@
 {
-  "env": {
-    "NEXTAUTH_SECRET": "@nextauth_secret",
-    "JWT_SECRET": "@jwt_secret",
-    "OPENAI_API_KEY": "@openai_api_key",
-    "NEXT_PUBLIC_API_URL": "https://api.mylovelu.de"
-  },
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 30
