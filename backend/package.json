@@ -2,9 +2,9 @@
   "name": "radbefund-backend",
   "version": "1.0.0",
   "description": "RadBefund+ Backend API",
-  "main": "simple-server.js",
+  "main": "railway-server.js",
   "scripts": {
-    "start": "node simple-server.js",
+    "start": "node railway-server.js",
     "build": "echo 'No build step required for simple server'",
     "dev": "node simple-server.js"
   },
