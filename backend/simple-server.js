@@ -32,10 +32,11 @@ function parseJSONBody(req) {
   });
 }
 
-// CORS headers - allow both mylovelu.de and www.mylovelu.de
+// CORS headers - allow all Vercel domains
 const allowedOrigins = [
   'https://mylovelu.de',
-  'https://www.mylovelu.de'
+  'https://www.mylovelu.de',
+  'https://radbefund-oapfxuzi3-radbefunds-projects.vercel.app'
 ];
 
 const corsHeaders = {
