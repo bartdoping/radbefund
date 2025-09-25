@@ -235,6 +235,52 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Befund history endpoint
+  if (path === '/api/befund-history' && method === 'GET') {
+    // Mock befund history response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([
+      {
+        id: 'befund-1',
+        title: 'CT-Thorax',
+        content: 'Unauffälliger CT-Thorax ohne pathologische Befunde.',
+        createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+        isFavorite: false
+      },
+      {
+        id: 'befund-2',
+        title: 'MRT-Knie',
+        content: 'Unauffälliges MRT des rechten Knies ohne pathologische Befunde.',
+        createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+        isFavorite: true
+      }
+    ]));
+    return;
+  }
+
+  // Layouts endpoint
+  if (path === '/layouts' && method === 'GET') {
+    // Mock layouts response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([
+      {
+        id: 'layout-1',
+        name: 'Standard Layout',
+        template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]\n\n**Empfehlungen:**\n[EMPFEHLUNGEN]',
+        isDefault: true,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'layout-2',
+        name: 'Kompakt Layout',
+        template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]',
+        isDefault: false,
+        createdAt: new Date().toISOString()
+      }
+    ]));
+    return;
+  }
+
   // Default response
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Route not found' }));
