@@ -7,15 +7,21 @@
     "start": "node simple-server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
+    "chromadb": "^1.10.5",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "pg": "^8.11.3",
-    "openai": "^4.20.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.6.0",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.7",
+    "openai": "^4.20.1",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.11.3",
+    "sharp": "^0.33.0",
+    "tesseract.js": "^5.0.4",
     "zod": "^3.22.4"
   },
   "engines": {
@@ -28,5 +34,15 @@
     "api"
   ],
   "author": "RadBefund+ Team",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/express-rate-limit": "^5.1.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.9.2"
+  }
 }

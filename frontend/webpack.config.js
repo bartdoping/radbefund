@@ -36,15 +36,8 @@ module.exports = {
   ],
   
 devServer: {
-  port: 3000,
-  // WICHTIG: echter HTTPS-Server mit den Office-Dev-Certs
-  server: {
-    type: "https",
-    options: {
-      key: fs.readFileSync(`${os.homedir()}/.office-addin-dev-certs/localhost.key`),
-      cert: fs.readFileSync(`${os.homedir()}/.office-addin-dev-certs/localhost.crt`),
-    },
-  },
+  port: 3002,
+  // HTTP-Server für einfacheren Zugriff ohne Zertifikat-Probleme
   allowedHosts: "all",
   hot: true,
   historyApiFallback: { index: "/taskpane.html" },

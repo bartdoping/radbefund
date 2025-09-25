@@ -6,12 +6,12 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { z } from "zod";
-import fs from "fs";
-import path from "path";
-import http from "http";
-import https from "https";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import * as fs from "fs";
+import * as path from "path";
+import * as http from "http";
+import * as https from "https";
+import * as bcrypt from "bcryptjs";
+import * as jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 
 // Import new services
@@ -490,13 +490,13 @@ async function callOpenAI(messages: Array<{ role: "system" | "user" | "assistant
 // Health check and metrics endpoints
 app.get("/healthz", healthCheckHandler);
 app.get("/metrics", metricsHandler);
-app.get("/health", (_req, res) => {
+app.get("/health", (_req: express.Request, res: express.Response) => {
   res.json({ status: "ok", provider: PROVIDER, timestamp: new Date().toISOString() });
 });
 
 // ---------- Auth Routes ----------
 // Registrierung
-app.post("/auth/register", authRateLimit, async (req, res) => {
+app.post("/auth/register", authRateLimit, async (req: express.Request, res: express.Response) => {
   try {
     const { email, password, name, organization } = RegisterSchema.parse(req.body);
     
@@ -554,7 +554,7 @@ app.post("/auth/register", authRateLimit, async (req, res) => {
 });
 
 // Anmeldung
-app.post("/auth/login", authRateLimit, async (req, res) => {
+app.post("/auth/login", authRateLimit, async (req: express.Request, res: express.Response) => {
   try {
     const { email, password } = LoginSchema.parse(req.body);
     
@@ -613,7 +613,7 @@ app.post("/auth/login", authRateLimit, async (req, res) => {
 });
 
 // Token erneuern
-app.post("/auth/refresh", async (req, res) => {
+app.post("/auth/refresh", async (req: express.Request, res: express.Response) => {
   try {
     const { refreshToken } = RefreshTokenSchema.parse(req.body);
     
@@ -693,7 +693,7 @@ app.get("/auth/profile", authenticateToken, async (req: express.Request, res: ex
   }
 });
 
-app.post("/process", authenticateToken, async (req, res) => {
+app.post("/process", authenticateToken, async (req: express.Request, res: express.Response) => {
   try {
     const { text, options, allowContentChanges } = ProcessSchema.parse(req.body);
     const { redacted, placeholders } = redactPII(text);
@@ -738,7 +738,7 @@ app.post("/process", authenticateToken, async (req, res) => {
 });
 
 // Beurteilung nach Hartung (Kurzbeurteilung/Impression)
-app.post("/impression", authenticateToken, async (req, res) => {
+app.post("/impression", authenticateToken, async (req: express.Request, res: express.Response) => {
   try {
     const { text } = ImpressionSchema.parse(req.body);
     const { redacted, placeholders } = redactPII(text);
@@ -776,7 +776,7 @@ app.post("/impression", authenticateToken, async (req, res) => {
 });
 
 // NEU: Strukturierte Ausgabe (Befund + Beurteilung + Empfehlungen) mit Layout-Template-Unterstützung
-app.post("/structured", authenticateToken, async (req, res) => {
+app.post("/structured", authenticateToken, async (req: express.Request, res: express.Response) => {
   const startTime = Date.now();
   const userId = (req as AuthenticatedRequest).userId;
   
