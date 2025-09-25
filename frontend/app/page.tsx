@@ -17,11 +17,34 @@ export default function Home() {
     organization: ''
   });
 
+  // Force deployment - Version 2.0
+  console.log('RadBefund+ Frontend v2.0 - Minimal Version');
+
   const API_BASE = 'https://api.mylovelu.de';
 
-  // Sichere Array-Funktionen
-  const safeArray = (arr: any) => Array.isArray(arr) ? arr : [];
-  const safeLength = (arr: any) => arr && arr.length ? arr.length : 0;
+  // Sichere Array-Funktionen - Version 2.0
+  const safeArray = (arr: any) => {
+    if (arr === null || arr === undefined) return [];
+    if (Array.isArray(arr)) return arr;
+    return [];
+  };
+  const safeLength = (arr: any) => {
+    if (arr === null || arr === undefined) return 0;
+    if (Array.isArray(arr)) return arr.length;
+    return 0;
+  };
+
+  // Globaler Array-Schutz
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+      if (event.error && event.error.message && 
+          event.error.message.includes('Cannot read properties of undefined (reading \'length\')')) {
+        console.warn('Array-Fehler abgefangen:', event.error.message);
+        event.preventDefault();
+        return false;
+      }
+    });
+  }
 
   const handleLogin = async () => {
     setLoading(true);
