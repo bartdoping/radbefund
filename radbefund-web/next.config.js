@@ -6,6 +6,34 @@ const nextConfig = {
   devServer: {
     port: 3002,
   },
+  // Domain-Konfiguration für Production
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+        ],
+      },
+    ]
+  },
+  // Redirect-Konfiguration
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/',
+        permanent: false,
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig

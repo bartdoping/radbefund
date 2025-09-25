@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import AuthModal from './components/AuthModal';
 import LayoutSelector from './components/LayoutSelector';
 import KnowledgeBaseAdmin from './components/KnowledgeBaseAdmin';
+import { API_URL } from '../lib/api';
+import { apiClient } from '../lib/api-client';
 
 // Additional Info Modal Component
 interface AdditionalInfoModalProps {
@@ -374,11 +376,7 @@ export default function Home() {
         // Validate token by making a test request
         const validateToken = async () => {
           try {
-            const response = await fetch('http://localhost:3001/auth/profile', {
-              headers: {
-                'Authorization': `Bearer ${savedToken}`
-              }
-            });
+            const response = await apiClient.profile(savedToken);
             
             if (response.ok) {
               setUser(userData);
@@ -437,12 +435,7 @@ export default function Home() {
     console.log('Loading befund history from PostgreSQL database...');
     
     try {
-      const response = await apiCall('http://localhost:3001/api/befund-history', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await apiClient.getBefundHistory(accessToken);
 
       if (response.ok) {
         const result = await response.json();
@@ -530,11 +523,7 @@ export default function Home() {
     const loadLayouts = async () => {
       if (user && accessToken) {
         try {
-          const response = await apiCall('http://localhost:3001/layouts', {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+          const response = await apiClient.getLayouts(accessToken);
 
           if (response.ok) {
             const data = await response.json();
@@ -568,13 +557,7 @@ export default function Home() {
     // If token expired or forbidden, try to refresh
     if ((response.status === 401 || response.status === 403) && refreshToken) {
       try {
-        const refreshResponse = await fetch('http://localhost:3001/auth/refresh', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refreshToken }),
-        });
+        const refreshResponse = await apiClient.refresh(refreshToken);
 
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json();
@@ -634,11 +617,7 @@ export default function Home() {
   };
 
   const handleLogin = async (email: string, password: string, rememberMe: boolean = true) => {
-    const response = await fetch('http://localhost:3001/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    const response = await apiClient.login(email, password);
 
     const data = await response.json();
 
@@ -670,11 +649,7 @@ export default function Home() {
   };
 
   const handleRegister = async (email: string, password: string, name: string, organization?: string) => {
-    const response = await fetch('http://localhost:3001/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name, organization }),
-    });
+    const response = await apiClient.register(email, password, name, organization);
 
     const data = await response.json();
 
@@ -707,11 +682,7 @@ export default function Home() {
   };
 
   const handleVerifyEmail = async (email: string, code: string, password: string, name: string, organization?: string) => {
-    const response = await fetch('http://localhost:3001/auth/verify-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, code, password, name, organization }),
-    });
+    const response = await apiClient.verifyEmail(email, code, password, name, organization);
 
     const data = await response.json();
 
@@ -735,11 +706,7 @@ export default function Home() {
   };
 
   const handleForgotPassword = async (email: string) => {
-    const response = await fetch('http://localhost:3001/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
+    const response = await apiClient.forgotPassword(email);
 
     const data = await response.json();
 
@@ -751,11 +718,7 @@ export default function Home() {
   };
 
   const handleResetPassword = async (token: string, newPassword: string) => {
-    const response = await fetch('http://localhost:3001/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, newPassword }),
-    });
+    const response = await apiClient.resetPassword(token, newPassword);
 
     const data = await response.json();
 
@@ -797,24 +760,18 @@ export default function Home() {
     });
     
     try {
-      const response = await apiCall('http://localhost:3001/api/befund-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await apiClient.saveBefund(accessToken, {
+        title,
+        originalText,
+        optimizedText: result,
+        options: {
+          workflowOptions: { ...workflowOptions },
+          selectedLayout,
+          selectedModalitaet,
+          additionalInfo: [...additionalInfo]
         },
-        body: JSON.stringify({
-          title,
-          originalText,
-          optimizedText: result,
-          options: {
-            workflowOptions: { ...workflowOptions },
-            selectedLayout,
-            selectedModalitaet,
-            additionalInfo: [...additionalInfo]
-          },
-          tags: [],
-          modality: selectedModalitaet || 'CT'
-        }),
+        tags: [],
+        modality: selectedModalitaet || 'CT'
       });
 
       console.log('Save befund response:', {
@@ -923,12 +880,7 @@ export default function Home() {
     
     if (window.confirm(`Sind Sie sicher, dass Sie "${befundTitle}" aus der Historie löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) {
       try {
-        const response = await apiCall(`http://localhost:3001/api/befund-history/${befundId}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        const response = await apiClient.deleteBefund(accessToken, befundId);
 
         if (response.ok) {
           console.log('✅ Befund deleted from PostgreSQL database');
@@ -955,13 +907,7 @@ export default function Home() {
       throw new Error('Sie müssen angemeldet sein, um Layouts zu speichern.');
     }
 
-    const response = await apiCall('http://localhost:3001/layouts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(layout),
-    });
+    const response = await apiClient.saveLayout(accessToken, layout);
 
     if (!response.ok) {
       const errorData = await response.json();
