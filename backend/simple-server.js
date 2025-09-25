@@ -237,47 +237,91 @@ const server = http.createServer((req, res) => {
 
   // Befund history endpoint
   if (path === '/api/befund-history' && method === 'GET') {
-    // Mock befund history response
+    // Mock befund history response with proper structure
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify([
-      {
-        id: 'befund-1',
-        title: 'CT-Thorax',
-        content: 'Unauffälliger CT-Thorax ohne pathologische Befunde.',
-        createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-        isFavorite: false
-      },
-      {
-        id: 'befund-2',
-        title: 'MRT-Knie',
-        content: 'Unauffälliges MRT des rechten Knies ohne pathologische Befunde.',
-        createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-        isFavorite: true
-      }
-    ]));
+    res.end(JSON.stringify({
+      success: true,
+      data: [
+        {
+          id: 'befund-1',
+          title: 'CT-Thorax',
+          content: 'Unauffälliger CT-Thorax ohne pathologische Befunde.',
+          createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+          isFavorite: false,
+          userId: 'admin-user-id'
+        },
+        {
+          id: 'befund-2',
+          title: 'MRT-Knie',
+          content: 'Unauffälliges MRT des rechten Knies ohne pathologische Befunde.',
+          createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+          isFavorite: true,
+          userId: 'admin-user-id'
+        }
+      ],
+      total: 2
+    }));
     return;
   }
 
   // Layouts endpoint
   if (path === '/layouts' && method === 'GET') {
-    // Mock layouts response
+    // Mock layouts response with proper structure
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify([
-      {
-        id: 'layout-1',
-        name: 'Standard Layout',
-        template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]\n\n**Empfehlungen:**\n[EMPFEHLUNGEN]',
-        isDefault: true,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'layout-2',
-        name: 'Kompakt Layout',
-        template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]',
-        isDefault: false,
-        createdAt: new Date().toISOString()
-      }
-    ]));
+    res.end(JSON.stringify({
+      success: true,
+      data: [
+        {
+          id: 'layout-1',
+          name: 'Standard Layout',
+          template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]\n\n**Empfehlungen:**\n[EMPFEHLUNGEN]',
+          isDefault: true,
+          createdAt: new Date().toISOString(),
+          userId: 'admin-user-id'
+        },
+        {
+          id: 'layout-2',
+          name: 'Kompakt Layout',
+          template: '**Befund:**\n[BEFUND]\n\n**Beurteilung:**\n[BEURTEILUNG]',
+          isDefault: false,
+          createdAt: new Date().toISOString(),
+          userId: 'admin-user-id'
+        }
+      ],
+      total: 2
+    }));
+    return;
+  }
+
+  // Knowledge base endpoints (mock)
+  if (path === '/api/knowledge/documents' && method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      data: [],
+      total: 0
+    }));
+    return;
+  }
+
+  if (path === '/api/knowledge/upload' && method === 'POST') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      message: 'Document uploaded successfully',
+      documentId: 'doc-' + Date.now()
+    }));
+    return;
+  }
+
+  // Additional info endpoints (mock)
+  if (path === '/api/additional-info' && method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      data: [],
+      total: 0
+    }));
     return;
   }
 
