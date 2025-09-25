@@ -39,13 +39,9 @@ const authenticateToken = (req, res, next) => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Database connection
+// Database connection - Railway PostgreSQL
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'radbefund_db',
-  user: process.env.DB_USER || 'radbefund_user',
-  password: process.env.DB_PASSWORD || 'radbefund_password',
+  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.PGUSER || 'postgres'}:${process.env.PGPASSWORD || 'password'}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'radbefund_db'}`,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
