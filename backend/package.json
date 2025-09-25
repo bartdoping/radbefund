@@ -4,7 +4,9 @@
   "description": "RadBefund+ Backend API",
   "main": "simple-server.js",
   "scripts": {
-    "start": "node simple-server.js"
+    "start": "node simple-server.js",
+    "build": "echo 'No build step required for simple server'",
+    "dev": "node simple-server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
