@@ -63,6 +63,76 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Auth routes
+  if (path === '/auth/register' && method === 'POST') {
+    // Mock registration response
+    res.writeHead(201, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      message: "Benutzer erfolgreich registriert",
+      user: {
+        id: "mock-user-id",
+        email: "user@example.com",
+        name: "Test User",
+        organization: "Test Org",
+        createdAt: new Date().toISOString()
+      },
+      accessToken: "mock-access-token",
+      refreshToken: "mock-refresh-token"
+    }));
+    return;
+  }
+
+  if (path === '/auth/login' && method === 'POST') {
+    // Mock login response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      message: "Erfolgreich angemeldet",
+      user: {
+        id: "mock-user-id",
+        email: "user@example.com",
+        name: "Test User",
+        organization: "Test Org",
+        lastLogin: new Date().toISOString()
+      },
+      accessToken: "mock-access-token",
+      refreshToken: "mock-refresh-token"
+    }));
+    return;
+  }
+
+  if (path === '/auth/refresh' && method === 'POST') {
+    // Mock refresh response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      accessToken: "new-mock-access-token",
+      refreshToken: "new-mock-refresh-token"
+    }));
+    return;
+  }
+
+  if (path === '/auth/logout' && method === 'POST') {
+    // Mock logout response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: "Erfolgreich abgemeldet" }));
+    return;
+  }
+
+  if (path === '/auth/profile' && method === 'GET') {
+    // Mock profile response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      user: {
+        id: "mock-user-id",
+        email: "user@example.com",
+        name: "Test User",
+        organization: "Test Org",
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      }
+    }));
+    return;
+  }
+
   // Default response
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Route not found' }));
