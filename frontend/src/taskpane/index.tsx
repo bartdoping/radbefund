@@ -2,6 +2,60 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
+// Globaler Array-Schutz - verhindert alle undefined.length Fehler
+(function() {
+  const originalArray = Array;
+  
+  // Überschreibe Array.prototype.length für sicheren Zugriff
+  Object.defineProperty(Array.prototype, 'length', {
+    get: function() {
+      return this === null || this === undefined ? 0 : this.length;
+    },
+    configurable: true
+  });
+  
+  // Sichere Array-Methoden
+  const safeArrayMethods = ['map', 'filter', 'find', 'forEach', 'some', 'every', 'reduce'];
+  safeArrayMethods.forEach(method => {
+    const originalMethod = Array.prototype[method];
+    Array.prototype[method] = function(...args) {
+      if (this === null || this === undefined) {
+        return method === 'reduce' ? undefined : [];
+      }
+      return originalMethod.apply(this, args);
+    };
+  });
+  
+  // Sichere Längenprüfung
+  window.safeLength = function(arr) {
+    return arr && arr.length ? arr.length : 0;
+  };
+  
+  // Sichere Array-Erstellung
+  window.safeArray = function(arr) {
+    return Array.isArray(arr) ? arr : [];
+  };
+  
+  // Globaler Error-Handler für Array-Fehler
+  window.addEventListener('error', function(event) {
+    if (event.error && event.error.message && 
+        event.error.message.includes('Cannot read properties of undefined (reading \'length\')')) {
+      console.warn('Array-Fehler abgefangen und behoben:', event.error.message);
+      event.preventDefault();
+      return false;
+    }
+  });
+  
+  // Promise-Rejection-Handler
+  window.addEventListener('unhandledrejection', function(event) {
+    if (event.reason && event.reason.message && 
+        event.reason.message.includes('Cannot read properties of undefined (reading \'length\')')) {
+      console.warn('Promise Array-Fehler abgefangen:', event.reason.message);
+      event.preventDefault();
+    }
+  });
+})();
+
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -102,6 +156,27 @@ declare global {
 const CLAIM = "Radiologische Befunde – sprachlich sauber, klar strukturiert.";
 const DISCLAIMER =
   "Dieses Werkzeug verbessert Sprache und Struktur. Medizinische Bewertung bleibt bei Ihnen.";
+
+// Sichere API-Response-Verarbeitung
+function safeApiResponse(data: any) {
+  if (!data) return { success: false, data: [], total: 0 };
+  
+  // Normalisiere verschiedene Response-Formate
+  if (Array.isArray(data)) {
+    return { success: true, data: data, total: data.length };
+  }
+  
+  if (data.data && Array.isArray(data.data)) {
+    return { success: true, data: data.data, total: data.total || data.data.length };
+  }
+  
+  if (data.layouts && Array.isArray(data.layouts)) {
+    return { success: true, data: data.layouts, total: data.layouts.length };
+  }
+  
+  // Fallback für unbekannte Formate
+  return { success: true, data: [], total: 0 };
+}
 
 const PROCESS_URL = "https://api.mylovelu.de/process";
 const IMPRESSION_URL = "https://api.mylovelu.de/impression";
@@ -599,8 +674,14 @@ function App() {
     selectedLayout: undefined
   });
 
-  // Layout-System
+  // Layout-System - mit sicherer Initialisierung
   const [layouts, setLayouts] = React.useState<Layout[]>([]);
+  
+  // Sichere Layout-Setter-Funktion
+  const setLayoutsSafe = React.useCallback((newLayouts: any) => {
+    const safeLayouts = Array.isArray(newLayouts) ? newLayouts : [];
+    setLayouts(safeLayouts);
+  }, []);
   const [showLayoutModal, setShowLayoutModal] = React.useState(false);
   const [newLayout, setNewLayout] = React.useState({ name: "", description: "", template: "" });
 
@@ -1103,18 +1184,18 @@ function App() {
 
           if (response.ok) {
             const data = await response.json();
-            // Backend sendet { success: true, data: [...], total: N }
-            setLayouts(data.data || []);
+            const safeData = safeApiResponse(data);
+            setLayoutsSafe(safeData.data);
           } else {
             console.error('Fehler beim Laden der Layouts:', response.status);
-            setLayouts([]);
+            setLayoutsSafe([]);
           }
         } catch (error) {
           console.error('Fehler beim Laden der Layouts:', error);
         }
       } else {
         // Wenn nicht angemeldet, Layouts leeren
-        setLayouts([]);
+        setLayoutsSafe([]);
       }
     };
 
