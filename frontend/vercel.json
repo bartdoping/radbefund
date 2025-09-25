@@ -1,7 +1,9 @@
 {
+  "buildCommand": "echo 'Static HTML - no build required'",
+  "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
@@ -12,6 +14,10 @@
         {
           "key": "Cache-Control",
           "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
         }
       ]
     }

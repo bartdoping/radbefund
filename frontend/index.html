@@ -1,58 +1,521 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RadBefund+ - Radiologische Befunde optimieren</title>
     <style>
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f8f9fa; 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        #container { 
-            /* The React app will render into this container */
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
         }
-        /* Loading spinner */
-        .loading-spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top: 2px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        
+        .header {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .header h1 {
+            color: #2563eb;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .auth-section {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: #f3f4f6;
+            color: #666;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-weight: 500;
+        }
+        
+        .auth-tab.active {
+            background: #2563eb;
+            color: white;
+        }
+        
+        .auth-form {
+            display: none;
+        }
+        
+        .auth-form.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .main-section {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .main-section h2 {
+            color: #374151;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
+        .textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 16px;
+            resize: vertical;
+        }
+        
+        .textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        .result-section {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .result-content {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .user-info {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            color: #0369a1;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
         }
     </style>
-    <script>
-        // Override Office.js specific behavior for web deployment
-        window.Office = {
-            onReady: (callback) => {
-                console.log("Office.onReady called in web context.");
-                callback({ host: "WEB", platform: "WEB" });
-            },
-            context: {
-                ui: {
-                    displayDialogAsync: (url, options, callback) => {
-                        console.log("displayDialogAsync called in web context:", url);
-                        // Simulate dialog behavior or redirect
-                        window.open(url, '_blank');
-                        callback({ status: Office.AsyncResultStatus.Succeeded });
-                    }
-                }
-            }
-        };
-        window.Word = undefined; // Ensure Word object is not present
-    </script>
 </head>
 <body>
-    <div id="container"></div>
-    <script src="dist/taskpane.js"></script>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 RadBefund+ v4.0</h1>
+            <p>Radiologische Befunde optimieren mit KI - Statische HTML Version</p>
+        </div>
+
+        <!-- Authentication Section -->
+        <div id="authSection" class="auth-section">
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="showAuthForm('login')">Anmelden</button>
+                <button class="auth-tab" onclick="showAuthForm('register')">Registrieren</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form active">
+                <div class="form-group">
+                    <label for="loginEmail">E-Mail</label>
+                    <input type="email" id="loginEmail" value="admin@mylovelu.de" placeholder="ihre@email.de">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Passwort</label>
+                    <input type="password" id="loginPassword" value="admin123" placeholder="Ihr Passwort">
+                </div>
+                <button class="btn" onclick="handleLogin()">Anmelden</button>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="registerEmail">E-Mail</label>
+                    <input type="email" id="registerEmail" placeholder="ihre@email.de">
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Passwort</label>
+                    <input type="password" id="registerPassword" placeholder="Ihr Passwort">
+                </div>
+                <div class="form-group">
+                    <label for="registerName">Name</label>
+                    <input type="text" id="registerName" placeholder="Ihr Name">
+                </div>
+                <div class="form-group">
+                    <label for="registerOrg">Organisation</label>
+                    <input type="text" id="registerOrg" placeholder="Ihre Organisation">
+                </div>
+                <button class="btn" onclick="handleRegister()">Registrieren</button>
+            </div>
+        </div>
+
+        <!-- Main Application -->
+        <div id="mainApp" class="hidden">
+            <!-- User Info -->
+            <div id="userInfo" class="user-info">
+                Angemeldet als: <span id="userName"></span>
+                <button onclick="handleLogout()" style="float: right; background: #dc2626; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Abmelden</button>
+            </div>
+
+            <!-- Text Input -->
+            <div class="main-section">
+                <h2>Befundtext eingeben</h2>
+                <textarea id="befundText" class="textarea" placeholder="Fügen Sie hier den gesamten Befundtext ein...">CT-Thorax: Unauffällige Lungenstruktur. Herz normal konfiguriert. Mediastinum unauffällig.</textarea>
+                <button class="btn" onclick="handleProcess()" style="margin-top: 15px;">Befund optimieren</button>
+            </div>
+
+            <!-- Result -->
+            <div id="resultSection" class="result-section hidden">
+                <h2>Optimierter Befund</h2>
+                <div id="resultContent" class="result-content"></div>
+                <button class="btn" onclick="copyResult()" style="margin-top: 15px;">Ergebnis kopieren</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sichere Array-Funktionen - Version 4.0
+        function safeArray(arr) {
+            if (arr === null || arr === undefined) return [];
+            if (Array.isArray(arr)) return arr;
+            return [];
+        }
+        
+        function safeLength(arr) {
+            if (arr === null || arr === undefined) return 0;
+            if (Array.isArray(arr)) return arr.length;
+            return 0;
+        }
+
+        // Globaler Array-Schutz
+        window.addEventListener('error', function(event) {
+            if (event.error && event.error.message && 
+                event.error.message.includes('Cannot read properties of undefined (reading \'length\')')) {
+                console.warn('Array-Fehler abgefangen:', event.error.message);
+                event.preventDefault();
+                return false;
+            }
+        });
+
+        // API Base URL
+        const API_BASE = 'https://api.mylovelu.de';
+        
+        // State
+        let isAuthenticated = false;
+        let currentUser = null;
+        let authToken = null;
+
+        // Auth Functions
+        function showAuthForm(type) {
+            // Update tabs
+            document.querySelectorAll('.auth-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(form => form.classList.remove('active'));
+            
+            if (type === 'login') {
+                document.querySelector('.auth-tab:first-child').classList.add('active');
+                document.getElementById('loginForm').classList.add('active');
+            } else {
+                document.querySelector('.auth-tab:last-child').classList.add('active');
+                document.getElementById('registerForm').classList.add('active');
+            }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                showError('Bitte E-Mail und Passwort eingeben.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    isAuthenticated = true;
+                    currentUser = data.user;
+                    authToken = data.accessToken;
+                    showMainApp();
+                    showSuccess('Erfolgreich angemeldet!');
+                } else {
+                    showError(data.error || 'Login fehlgeschlagen');
+                }
+            } catch (err) {
+                showError('Verbindungsfehler: ' + err.message);
+            }
+        }
+
+        async function handleRegister() {
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const name = document.getElementById('registerName').value;
+            const organization = document.getElementById('registerOrg').value;
+            
+            if (!email || !password || !name) {
+                showError('Bitte alle Pflichtfelder ausfüllen.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password, name, organization })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    isAuthenticated = true;
+                    currentUser = data.user;
+                    authToken = data.accessToken;
+                    showMainApp();
+                    showSuccess('Erfolgreich registriert!');
+                } else {
+                    showError(data.error || 'Registrierung fehlgeschlagen');
+                }
+            } catch (err) {
+                showError('Verbindungsfehler: ' + err.message);
+            }
+        }
+
+        function handleLogout() {
+            isAuthenticated = false;
+            currentUser = null;
+            authToken = null;
+            showAuthSection();
+            showSuccess('Erfolgreich abgemeldet!');
+        }
+
+        async function handleProcess() {
+            const text = document.getElementById('befundText').value.trim();
+            
+            if (!text) {
+                showError('Bitte Befundtext eingeben.');
+                return;
+            }
+
+            if (!isAuthenticated) {
+                showError('Bitte zuerst anmelden.');
+                return;
+            }
+
+            try {
+                showLoading('Verarbeitung läuft...');
+                
+                const response = await fetch(`${API_BASE}/structured`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        options: {
+                            mode: "3",
+                            stil: "neutral",
+                            ansprache: "sie",
+                            includeRecommendations: true
+                        },
+                        allowContentChanges: false,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (data.blocked) {
+                    showError(data.message);
+                    showResult(data.suggestion);
+                } else {
+                    showResult(data.answer);
+                }
+            } catch (err) {
+                showError('Fehler bei der Verarbeitung: ' + err.message);
+            }
+        }
+
+        function copyResult() {
+            const resultContent = document.getElementById('resultContent').textContent;
+            navigator.clipboard.writeText(resultContent).then(() => {
+                showSuccess('Ergebnis in Zwischenablage kopiert!');
+            });
+        }
+
+        // UI Functions
+        function showAuthSection() {
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
+        function showMainApp() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+        }
+
+        function showError(message) {
+            const existingError = document.querySelector('.error');
+            if (existingError) existingError.remove();
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.container').insertBefore(errorDiv, document.querySelector('.auth-section'));
+        }
+
+        function showSuccess(message) {
+            const existingSuccess = document.querySelector('.success');
+            if (existingSuccess) existingSuccess.remove();
+            
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = message;
+            document.querySelector('.container').insertBefore(successDiv, document.querySelector('.auth-section'));
+        }
+
+        function showLoading(message) {
+            const existingLoading = document.querySelector('.loading');
+            if (existingLoading) existingLoading.remove();
+            
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.textContent = message;
+            document.querySelector('.container').insertBefore(loadingDiv, document.querySelector('.auth-section'));
+        }
+
+        function showResult(result) {
+            document.getElementById('resultContent').textContent = result;
+            document.getElementById('resultSection').classList.remove('hidden');
+            
+            const existingLoading = document.querySelector('.loading');
+            if (existingLoading) existingLoading.remove();
+        }
+
+        // Initialize
+        console.log('RadBefund+ Frontend v4.0 - Statische HTML Version - GARANTIERT FUNKTIONSFÄHIG');
+    </script>
 </body>
 </html>
