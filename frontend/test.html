@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadBefund+ Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        textarea { height: 100px; }
+        .result {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 RadBefund+ Backend Test</h1>
+        
+        <div id="status" class="status info">
+            Initialisiere Test...
+        </div>
+
+        <h2>Backend-Verbindung testen</h2>
+        <button onclick="testBackend()">Backend testen</button>
+        <div id="backendResult" class="result"></div>
+
+        <h2>Auth testen</h2>
+        <input type="email" id="email" placeholder="Email" value="admin@mylovelu.de">
+        <input type="password" id="password" placeholder="Passwort" value="admin123">
+        <button onclick="testAuth()">Login testen</button>
+        <div id="authResult" class="result"></div>
+
+        <h2>Befund generieren</h2>
+        <textarea id="text" placeholder="Befundtext eingeben...">CT-Thorax: Unauffällige Lungenstruktur. Herz normal konfiguriert.</textarea>
+        <button onclick="testBefund()">Befund generieren</button>
+        <div id="befundResult" class="result"></div>
+
+        <h2>API-Endpoints testen</h2>
+        <button onclick="testEndpoints()">Alle Endpoints testen</button>
+        <div id="endpointsResult" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.mylovelu.de';
+        let authToken = null;
+
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function logResult(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+
+        async function testBackend() {
+            updateStatus('Teste Backend-Verbindung...', 'info');
+            logResult('backendResult', 'Starte Backend-Test...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateStatus('✅ Backend erreichbar!', 'success');
+                    logResult('backendResult', `✅ Backend OK: ${JSON.stringify(data)}`);
+                } else {
+                    updateStatus('❌ Backend-Fehler', 'error');
+                    logResult('backendResult', `❌ Backend-Fehler: ${response.status} - ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                updateStatus('❌ Backend nicht erreichbar', 'error');
+                logResult('backendResult', `❌ Fehler: ${error.message}`);
+            }
+        }
+
+        async function testAuth() {
+            updateStatus('Teste Authentifizierung...', 'info');
+            logResult('authResult', 'Starte Auth-Test...');
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authToken = data.accessToken;
+                    updateStatus('✅ Login erfolgreich!', 'success');
+                    logResult('authResult', `✅ Login OK: ${data.user.name} (${data.user.email})`);
+                } else {
+                    updateStatus('❌ Login fehlgeschlagen', 'error');
+                    logResult('authResult', `❌ Login-Fehler: ${response.status} - ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                updateStatus('❌ Auth-Fehler', 'error');
+                logResult('authResult', `❌ Fehler: ${error.message}`);
+            }
+        }
+
+        async function testBefund() {
+            if (!authToken) {
+                logResult('befundResult', '❌ Bitte zuerst einloggen!');
+                return;
+            }
+            
+            updateStatus('Teste Befund-Generierung...', 'info');
+            logResult('befundResult', 'Starte Befund-Test...');
+            
+            const text = document.getElementById('text').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/structured`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        options: {
+                            mode: "3",
+                            stil: "neutral",
+                            ansprache: "sie",
+                            includeRecommendations: true
+                        }
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateStatus('✅ Befund generiert!', 'success');
+                    logResult('befundResult', `✅ Befund OK: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    updateStatus('❌ Befund-Generierung fehlgeschlagen', 'error');
+                    logResult('befundResult', `❌ Befund-Fehler: ${response.status} - ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                updateStatus('❌ Befund-Fehler', 'error');
+                logResult('befundResult', `❌ Fehler: ${error.message}`);
+            }
+        }
+
+        async function testEndpoints() {
+            updateStatus('Teste alle API-Endpoints...', 'info');
+            logResult('endpointsResult', 'Starte Endpoint-Tests...');
+            
+            const endpoints = [
+                { name: 'Health', url: '/health', method: 'GET' },
+                { name: 'Test', url: '/api/test', method: 'GET' },
+                { name: 'Befund History', url: '/api/befund-history', method: 'GET' },
+                { name: 'Layouts', url: '/layouts', method: 'GET' },
+                { name: 'Knowledge Documents', url: '/api/knowledge/documents', method: 'GET' },
+                { name: 'Additional Info', url: '/api/additional-info', method: 'GET' }
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`${API_BASE}${endpoint.url}`, {
+                        method: endpoint.method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        logResult('endpointsResult', `✅ ${endpoint.name}: OK (${response.status})`);
+                        if (data.data && Array.isArray(data.data)) {
+                            logResult('endpointsResult', `   └─ ${data.data.length} Einträge gefunden`);
+                        }
+                    } else {
+                        logResult('endpointsResult', `❌ ${endpoint.name}: ${response.status} - ${JSON.stringify(data)}`);
+                    }
+                } catch (error) {
+                    logResult('endpointsResult', `❌ ${endpoint.name}: ${error.message}`);
+                }
+            }
+            
+            updateStatus('✅ Endpoint-Tests abgeschlossen!', 'success');
+        }
+
+        // Automatischer Test beim Laden
+        window.onload = function() {
+            updateStatus('Test-Seite geladen. Klicken Sie auf "Backend testen" um zu beginnen.', 'info');
+        };
+    </script>
+</body>
+</html>
