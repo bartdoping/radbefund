@@ -33,5 +33,8 @@
   "buildCommand": "echo 'Static HTML - no build required'",
   "outputDirectory": ".",
   "installCommand": "echo 'No install required'",
-  "devCommand": "echo 'No dev required'"
+  "devCommand": "echo 'No dev required'",
+  "ignoreCommand": "echo 'No ignore required'",
+  "cleanUrls": true,
+  "trailingSlash": false
 }
