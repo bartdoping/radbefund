@@ -1,11 +1,19 @@
 {
-  "functions": {
-    "app/api/**/*.ts": {
-      "maxDuration": 30
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
     }
-  },
-  "env": {
-    "OPENAI_API_KEY": "@openai_api_key",
-    "JWT_SECRET": "@jwt_secret"
-  }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ]
 }
