@@ -95,6 +95,44 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Knowledge Base Tables
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    content TEXT,
+    file_path VARCHAR(500),
+    file_type VARCHAR(50),
+    file_size INTEGER,
+    modality VARCHAR(50),
+    category VARCHAR(100),
+    tags TEXT[],
+    annotations JSONB,
+    priority VARCHAR(20) DEFAULT 'medium',
+    is_active BOOLEAN DEFAULT true,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding VECTOR(1536),
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    parent_id UUID REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Indexes für Performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
@@ -107,12 +145,23 @@ CREATE INDEX IF NOT EXISTS idx_api_usage_created_at ON api_usage(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
+-- Knowledge Base Indexes
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_modality ON knowledge_documents(modality);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_category ON knowledge_documents(category);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_tags ON knowledge_documents USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_created_by ON knowledge_documents(created_by);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_active ON knowledge_documents(is_active);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document_id ON knowledge_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops);
+
 -- Row Level Security (RLS) aktivieren
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE refresh_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_layouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_chunks ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 -- Users können nur ihre eigenen Daten sehen
@@ -138,6 +187,24 @@ CREATE POLICY "Users can view own usage" ON api_usage
 CREATE POLICY "Users can view own audit logs" ON audit_logs
     FOR SELECT USING (user_id = current_setting('app.current_user_id')::uuid);
 
+-- Knowledge Base Policies (Admin-only für Upload, alle für Lesen)
+CREATE POLICY "Admin can manage knowledge documents" ON knowledge_documents
+    FOR ALL USING (created_by = current_setting('app.current_user_id')::uuid);
+
+CREATE POLICY "All users can view knowledge documents" ON knowledge_documents
+    FOR SELECT USING (is_active = true);
+
+CREATE POLICY "Admin can manage knowledge chunks" ON knowledge_chunks
+    FOR ALL USING (document_id IN (
+        SELECT id FROM knowledge_documents 
+        WHERE created_by = current_setting('app.current_user_id')::uuid
+    ));
+
+CREATE POLICY "All users can view knowledge chunks" ON knowledge_chunks
+    FOR SELECT USING (document_id IN (
+        SELECT id FROM knowledge_documents WHERE is_active = true
+    ));
+
 -- Trigger für updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -151,6 +218,9 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_user_layouts_updated_at BEFORE UPDATE ON user_layouts
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE TRIGGER update_knowledge_documents_updated_at BEFORE UPDATE ON knowledge_documents
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- Funktionen für häufige Operationen
