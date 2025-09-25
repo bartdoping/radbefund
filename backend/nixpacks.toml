@@ -8,4 +8,4 @@ cmds = ["npm ci --only=production"]
 cmds = ["echo 'Build phase completed'"]
 
 [start]
-cmd = "node simple-server.js"
+cmd = "node railway-server.js"
