@@ -4,9 +4,13 @@ const url = require('url');
 
 const PORT = process.env.PORT || 3001;
 
-// CORS headers
+// CORS headers - allow both mylovelu.de and www.mylovelu.de
+const allowedOrigins = [
+  'https://mylovelu.de',
+  'https://www.mylovelu.de'
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || 'https://mylovelu.de',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Credentials': 'true'
@@ -17,16 +21,27 @@ const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const path = parsedUrl.pathname;
   const method = req.method;
+  const origin = req.headers.origin;
+
+  // Check if origin is allowed
+  const isAllowedOrigin = allowedOrigins.includes(origin);
+  const corsOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
+
+  // Prepare CORS headers with dynamic origin
+  const responseCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': corsOrigin
+  };
 
   // Handle CORS preflight
   if (method === 'OPTIONS') {
-    res.writeHead(200, corsHeaders);
+    res.writeHead(200, responseCorsHeaders);
     res.end();
     return;
   }
 
   // Add CORS headers to all responses
-  Object.entries(corsHeaders).forEach(([key, value]) => {
+  Object.entries(responseCorsHeaders).forEach(([key, value]) => {
     res.setHeader(key, value);
   });
 
