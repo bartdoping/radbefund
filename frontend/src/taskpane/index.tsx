@@ -103,16 +103,16 @@ const CLAIM = "Radiologische Befunde – sprachlich sauber, klar strukturiert.";
 const DISCLAIMER =
   "Dieses Werkzeug verbessert Sprache und Struktur. Medizinische Bewertung bleibt bei Ihnen.";
 
-const PROCESS_URL = "http://localhost:3001/process";
-const IMPRESSION_URL = "http://localhost:3001/impression";
-const STRUCTURED_URL = "http://localhost:3001/structured";
+const PROCESS_URL = "https://api.mylovelu.de/process";
+const IMPRESSION_URL = "https://api.mylovelu.de/impression";
+const STRUCTURED_URL = "https://api.mylovelu.de/structured";
 
 // Auth URLs
-const AUTH_REGISTER_URL = "http://localhost:3001/auth/register";
-const AUTH_LOGIN_URL = "http://localhost:3001/auth/login";
-const AUTH_REFRESH_URL = "http://localhost:3001/auth/refresh";
-const AUTH_LOGOUT_URL = "http://localhost:3001/auth/logout";
-const AUTH_PROFILE_URL = "http://localhost:3001/auth/profile";
+const AUTH_REGISTER_URL = "https://api.mylovelu.de/auth/register";
+const AUTH_LOGIN_URL = "https://api.mylovelu.de/auth/login";
+const AUTH_REFRESH_URL = "https://api.mylovelu.de/auth/refresh";
+const AUTH_LOGOUT_URL = "https://api.mylovelu.de/auth/logout";
+const AUTH_PROFILE_URL = "https://api.mylovelu.de/auth/profile";
 
 // Slider-Level statt A–D
 type Level = 1 | 2 | 3 | 4 | 5;
@@ -686,7 +686,7 @@ function App() {
         return;
       }
 
-      const response = await fetch('http://localhost:3001/layouts', {
+      const response = await fetch('https://api.mylovelu.de/layouts', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authState.accessToken}`,
@@ -721,7 +721,7 @@ function App() {
         return;
       }
 
-      const response = await fetch(`http://localhost:3001/layouts/${layoutId}`, {
+      const response = await fetch(`https://api.mylovelu.de/layouts/${layoutId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authState.accessToken}`,
@@ -1094,7 +1094,7 @@ function App() {
     const loadLayouts = async () => {
       if (authState.isAuthenticated && authState.accessToken) {
         try {
-          const response = await fetch('http://localhost:3001/layouts', {
+          const response = await fetch('https://api.mylovelu.de/layouts', {
             headers: {
               'Authorization': `Bearer ${authState.accessToken}`,
               'Content-Type': 'application/json'
@@ -1103,9 +1103,11 @@ function App() {
 
           if (response.ok) {
             const data = await response.json();
-            setLayouts(data.layouts);
+            // Backend sendet { success: true, data: [...], total: N }
+            setLayouts(data.data || []);
           } else {
             console.error('Fehler beim Laden der Layouts:', response.status);
+            setLayouts([]);
           }
         } catch (error) {
           console.error('Fehler beim Laden der Layouts:', error);
@@ -1316,7 +1318,7 @@ function App() {
     
     try {
       // Layout-Information für Backend
-      const selectedLayout = layouts.find(l => l.id === workflowOptions.selectedLayout);
+      const selectedLayout = layouts?.find(l => l.id === workflowOptions.selectedLayout);
       const layoutTemplate = selectedLayout ? selectedLayout.template : undefined;
       
       const payload = { 
@@ -2043,10 +2045,10 @@ function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: "14px", fontWeight: "600", color: "#2c3e50" }}>
-                    {layouts.find(l => l.id === workflowOptions.selectedLayout)?.name}
+                    {layouts?.find(l => l.id === workflowOptions.selectedLayout)?.name}
                   </div>
                   <div style={{ fontSize: "12px", color: "#6c757d" }}>
-                    {layouts.find(l => l.id === workflowOptions.selectedLayout)?.description}
+                    {layouts?.find(l => l.id === workflowOptions.selectedLayout)?.description}
                   </div>
                 </div>
                 <button
@@ -2079,7 +2081,7 @@ function App() {
             </div>
           )}
 
-          {layouts.length > 0 && (
+          {layouts && layouts.length > 0 && (
             <div style={{ maxHeight: "200px", overflowY: "auto" }}>
               {layouts.map((layout) => (
                 <div

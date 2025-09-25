@@ -1,5 +1,5 @@
 // src/radbefund/api.ts
-export const API_BASE = "http://localhost:3001"; // bei dir: Backend-Port prüfen!
+export const API_BASE = "https://api.mylovelu.de"; // Produktions-Backend
 
 type Mode = "A" | "B" | "C" | "D";
 type Style = "knapp" | "neutral" | "ausführlicher";
