@@ -4,6 +4,34 @@ const url = require('url');
 
 const PORT = process.env.PORT || 3001;
 
+// Simple in-memory user storage for demo
+const users = new Map();
+users.set('admin@mylovelu.de', {
+  id: 'admin-user-id',
+  email: 'admin@mylovelu.de',
+  password: 'admin123', // In production: hashed password
+  name: 'Admin User',
+  organization: 'RadBefund+',
+  createdAt: new Date().toISOString()
+});
+
+// Helper function to parse JSON body
+function parseJSONBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
 // CORS headers - allow both mylovelu.de and www.mylovelu.de
 const allowedOrigins = [
   'https://mylovelu.de',
@@ -65,38 +93,99 @@ const server = http.createServer((req, res) => {
 
   // Auth routes
   if (path === '/auth/register' && method === 'POST') {
-    // Mock registration response
-    res.writeHead(201, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      message: "Benutzer erfolgreich registriert",
-      user: {
-        id: "mock-user-id",
-        email: "user@example.com",
-        name: "Test User",
-        organization: "Test Org",
+    parseJSONBody(req).then(data => {
+      const { email, password, name, organization } = data;
+      
+      // Basic validation
+      if (!email || !password || !name) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Email, Passwort und Name sind erforderlich" }));
+        return;
+      }
+      
+      // Check if user already exists
+      if (users.has(email.toLowerCase())) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Benutzer mit dieser E-Mail existiert bereits" }));
+        return;
+      }
+      
+      // Create new user
+      const userId = 'user-' + Date.now();
+      const newUser = {
+        id: userId,
+        email: email.toLowerCase(),
+        password: password, // In production: hash password
+        name: name,
+        organization: organization || '',
         createdAt: new Date().toISOString()
-      },
-      accessToken: "mock-access-token",
-      refreshToken: "mock-refresh-token"
-    }));
+      };
+      
+      users.set(email.toLowerCase(), newUser);
+      
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: "Benutzer erfolgreich registriert",
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          organization: newUser.organization,
+          createdAt: newUser.createdAt
+        },
+        accessToken: "access-token-" + userId,
+        refreshToken: "refresh-token-" + userId
+      }));
+    }).catch(error => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: "Ungültige JSON-Daten" }));
+    });
     return;
   }
 
   if (path === '/auth/login' && method === 'POST') {
-    // Mock login response
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      message: "Erfolgreich angemeldet",
-      user: {
-        id: "mock-user-id",
-        email: "user@example.com",
-        name: "Test User",
-        organization: "Test Org",
-        lastLogin: new Date().toISOString()
-      },
-      accessToken: "mock-access-token",
-      refreshToken: "mock-refresh-token"
-    }));
+    parseJSONBody(req).then(data => {
+      const { email, password } = data;
+      
+      // Basic validation
+      if (!email || !password) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Email und Passwort sind erforderlich" }));
+        return;
+      }
+      
+      // Check if user exists
+      const user = users.get(email.toLowerCase());
+      if (!user) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Ungültige Anmeldedaten" }));
+        return;
+      }
+      
+      // Check password
+      if (user.password !== password) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Ungültige Anmeldedaten" }));
+        return;
+      }
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: "Erfolgreich angemeldet",
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          organization: user.organization,
+          lastLogin: new Date().toISOString()
+        },
+        accessToken: "access-token-" + user.id,
+        refreshToken: "refresh-token-" + user.id
+      }));
+    }).catch(error => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: "Ungültige JSON-Daten" }));
+    });
     return;
   }
 
@@ -128,6 +217,19 @@ const server = http.createServer((req, res) => {
         organization: "Test Org",
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
+      }
+    }));
+    return;
+  }
+
+  // Structured report generation endpoint
+  if (path === '/structured' && method === 'POST') {
+    // Mock structured report response
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      blocked: false,
+      answer: {
+        befund: "**Befund:**\n\nEs wurde eine CT-Untersuchung des Thorax durchgeführt. Die Lungen zeigen eine unauffällige Struktur ohne pathologische Veränderungen. Das Herz ist normal konfiguriert. Die mediastinalen Strukturen sind regelrecht dargestellt.\n\n**Beurteilung:**\n\nUnauffälliger CT-Thorax ohne pathologische Befunde.\n\n**Empfehlungen:**\n\nKeine weiteren Maßnahmen erforderlich.\n\n**Zusatzinformationen:**\n\nDie Untersuchung wurde in Standardtechnik durchgeführt."
       }
     }));
     return;
