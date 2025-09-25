@@ -2,33 +2,98 @@
 
 import { useState } from 'react';
 
-interface WorkflowOptions {
-  option1: boolean;
-  option2: boolean;
-  option3: boolean;
-  option4: boolean;
-  option5: boolean;
-}
-
 export default function Home() {
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [workflowOptions, setWorkflowOptions] = useState<WorkflowOptions>({
-    option1: true,
-    option2: false,
-    option3: false,
-    option4: false,
-    option5: false,
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState('login');
+  const [authData, setAuthData] = useState({
+    email: 'admin@mylovelu.de',
+    password: 'admin123',
+    name: '',
+    organization: ''
   });
 
-  const getActiveLevel = (): "1" | "2" | "3" | "4" | "5" => {
-    if (workflowOptions.option5) return "5";
-    if (workflowOptions.option4) return "4";
-    if (workflowOptions.option3) return "3";
-    if (workflowOptions.option2) return "2";
-    return "1";
+  const API_BASE = 'https://api.mylovelu.de';
+
+  // Sichere Array-Funktionen
+  const safeArray = (arr: any) => Array.isArray(arr) ? arr : [];
+  const safeLength = (arr: any) => arr && arr.length ? arr.length : 0;
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: authData.email,
+          password: authData.password
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setIsAuthenticated(true);
+        setUser(data.user);
+        setError('');
+      } else {
+        setError(data.error || 'Login fehlgeschlagen');
+      }
+    } catch (err) {
+      setError('Verbindungsfehler');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: authData.email,
+          password: authData.password,
+          name: authData.name,
+          organization: authData.organization
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setIsAuthenticated(true);
+        setUser(data.user);
+        setError('');
+      } else {
+        setError(data.error || 'Registrierung fehlgeschlagen');
+      }
+    } catch (err) {
+      setError('Verbindungsfehler');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    setResult('');
+    setError('');
   };
 
   const handleProcess = async () => {
@@ -42,7 +107,7 @@ export default function Home() {
     setResult('');
 
     try {
-      const response = await fetch('/api/ai/process', {
+      const response = await fetch(`${API_BASE}/structured`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,8 +115,10 @@ export default function Home() {
         body: JSON.stringify({
           text: text.trim(),
           options: {
-            mode: getActiveLevel(),
-            includeRecommendations: true,
+            mode: "3",
+            stil: "neutral",
+            ansprache: "sie",
+            includeRecommendations: true
           },
           allowContentChanges: false,
         }),
@@ -72,95 +139,168 @@ export default function Home() {
     }
   };
 
-  const toggleOption = (option: keyof WorkflowOptions) => {
-    if (option === 'option1') return; // Option 1 ist immer aktiv
-    
-    setWorkflowOptions(prev => ({
-      ...prev,
-      [option]: !prev[option]
-    }));
-  };
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">RadBefund+</h1>
+            <p className="text-gray-600">Radiologische Befunde optimieren</p>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex space-x-1 mb-4">
+              <button
+                onClick={() => setAuthMode('login')}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium ${
+                  authMode === 'login'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Anmelden
+              </button>
+              <button
+                onClick={() => setAuthMode('register')}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium ${
+                  authMode === 'register'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Registrieren
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                E-Mail
+              </label>
+              <input
+                type="email"
+                value={authData.email}
+                onChange={(e) => setAuthData({...authData, email: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="ihre@email.de"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Passwort
+              </label>
+              <input
+                type="password"
+                value={authData.password}
+                onChange={(e) => setAuthData({...authData, password: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ihr Passwort"
+              />
+            </div>
+
+            {authMode === 'register' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={authData.name}
+                    onChange={(e) => setAuthData({...authData, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ihr Name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Organisation
+                  </label>
+                  <input
+                    type="text"
+                    value={authData.organization}
+                    onChange={(e) => setAuthData({...authData, organization: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ihre Organisation"
+                  />
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            )}
+
+            <button
+              onClick={authMode === 'login' ? handleLogin : handleRegister}
+              disabled={loading}
+              className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Lädt...' : (authMode === 'login' ? 'Anmelden' : 'Registrieren')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">R+</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">RadBefund+</h1>
-                <p className="text-sm text-gray-500">Radiologische Befunde optimieren</p>
-              </div>
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-bold text-gray-900">RadBefund+</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">
+                Angemeldet als: {user?.name || user?.email}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Abmelden
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Workflow Options */}
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Workflow-Optionen</h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {[
-              { key: 'option1', label: '1: Sprachliche Korrektur', always: true },
-              { key: 'option2', label: '2: Terminologie verbessern' },
-              { key: 'option3', label: '3: Umstrukturierung + Beurteilung' },
-              { key: 'option4', label: '4: Klinische Empfehlung' },
-              { key: 'option5', label: '5: Zusatzinfos/DDx' },
-            ].map(({ key, label, always }) => (
-              <button
-                key={key}
-                onClick={() => toggleOption(key as keyof WorkflowOptions)}
-                disabled={always}
-                className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                  workflowOptions[key as keyof WorkflowOptions]
-                    ? 'border-primary-500 bg-primary-50 text-primary-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                } ${always ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                {label}
-                {workflowOptions[key as keyof WorkflowOptions] && (
-                  <span className="ml-2">✓</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Text Input */}
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Befundtext</h2>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Fügen Sie hier den gesamten Befundtext ein..."
-            className="w-full h-64 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full h-64 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
-        {/* Process Button */}
         <div className="text-center mb-6">
           <button
             onClick={handleProcess}
             disabled={loading}
-            className="bg-gradient-to-r from-primary-500 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:from-primary-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="bg-blue-500 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Verarbeitung läuft...' : 'Befund erstellen'}
           </button>
         </div>
 
-        {/* Error Display */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-red-700">{error}</p>
           </div>
         )}
 
-        {/* Result Display */}
         {result && (
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Optimierter Befund</h2>
@@ -170,14 +310,14 @@ export default function Home() {
             <div className="mt-4 flex justify-end">
               <button
                 onClick={() => navigator.clipboard.writeText(result)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium"
               >
                 Kopieren
               </button>
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
