@@ -32,12 +32,24 @@ function parseJSONBody(req) {
   });
 }
 
-// CORS headers - allow all Vercel domains
+// CORS headers - allow all Vercel domains dynamically
 const allowedOrigins = [
   'https://mylovelu.de',
-  'https://www.mylovelu.de',
-  'https://radbefund-oapfxuzi3-radbefunds-projects.vercel.app'
+  'https://www.mylovelu.de'
 ];
+
+// Function to check if origin is allowed (including all Vercel domains)
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  
+  // Allow mylovelu.de domains
+  if (allowedOrigins.includes(origin)) return true;
+  
+  // Allow all Vercel domains
+  if (origin.includes('.vercel.app')) return true;
+  
+  return false;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -55,8 +67,8 @@ const server = http.createServer((req, res) => {
   // Debug logging
   console.log(`[${new Date().toISOString()}] ${method} ${path} from ${origin || 'unknown'}`);
 
-  // Check if origin is allowed
-  const isAllowedOrigin = allowedOrigins.includes(origin);
+  // Check if origin is allowed using dynamic function
+  const isAllowedOrigin = isOriginAllowed(origin);
   const corsOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
 
   // Prepare CORS headers with dynamic origin
