@@ -78,8 +78,6 @@ app.use(
   rateLimit({
     windowMs: config.rateLimit.windowMs,
     max: config.rateLimit.maxRequests,
-    standardHeaders: true,
-    legacyHeaders: false,
     message: "Zu viele Anfragen, bitte versuchen Sie es später erneut",
   })
 );
@@ -93,8 +91,6 @@ const authRateLimit = rateLimit({
   windowMs: config.rateLimit.authWindowMs,
   max: config.rateLimit.authMaxRequests,
   message: "Zu viele Anmeldeversuche, bitte versuchen Sie es später erneut",
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 // ---------- Provider-Setup ----------

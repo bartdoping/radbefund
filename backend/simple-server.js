@@ -111,7 +111,9 @@ async function initializeDatabase() {
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://www.mylovelu.de', 'https://mylovelu.de'] 
+    : 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
