@@ -1,13 +1,14 @@
 {
   "name": "radbefund-static",
-  "version": "5.0.0",
-  "description": "RadBefund+ Static HTML Version - No Build Required",
+  "version": "9.0.0",
+  "description": "Static HTML version of RadBefund+",
   "main": "index.html",
   "scripts": {
     "build": "echo 'Static HTML - no build required'",
     "start": "echo 'Static HTML - no start required'",
     "dev": "echo 'Static HTML - no dev required'"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "keywords": ["static", "html", "radiology"],
+  "author": "RadBefund+",
+  "license": "MIT"
 }
